@@ -1,0 +1,20 @@
+{
+    "name": "who-said-dis",
+    "version": "1.0.0",
+    "description": "A modern, mobile-first web adaptation of the classic party game 'The Game of Things'",
+    "scripts": {
+        "install-all": "npm install --prefix frontend && npm install --prefix server",
+        "build": "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix server",
+        "start": "node server/index.js",
+        "dev": "concurrently \"npm run dev --prefix frontend\" \"npm run dev --prefix server\""
+    },
+    "keywords": [],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
