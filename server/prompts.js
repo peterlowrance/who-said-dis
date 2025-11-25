@@ -1,0 +1,22 @@
+module.exports = [
+  "Things you shouldn't do when you're naked",
+  "Things you shouldn't say to your boss",
+  "Things you shouldn't put in your mouth",
+  "Things you shouldn't do at a funeral",
+  "Things you shouldn't say to a police officer",
+  "Things you shouldn't do on a first date",
+  "Things you shouldn't say to your mother-in-law",
+  "Things you shouldn't do in a library",
+  "Things you shouldn't say to a flight attendant",
+  "Things you shouldn't do in a job interview",
+  "Things you shouldn't say to a doctor",
+  "Things you shouldn't do in a movie theater",
+  "Things you shouldn't say to a teacher",
+  "Things you shouldn't do in a public restroom",
+  "Things you shouldn't say to a waiter",
+  "Things you shouldn't do in a church",
+  "Things you shouldn't say to a baby",
+  "Things you shouldn't do in a hospital",
+  "Things you shouldn't say to a celebrity",
+  "Things you shouldn't do in a swimming pool"
+];
