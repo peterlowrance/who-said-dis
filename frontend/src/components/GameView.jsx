@@ -124,8 +124,8 @@ export function GameView({ socket, gameState, selfId }) {
     }, [socket, myPlayer, selfId]);
 
     if (status === 'READING' || status === 'GUESSING') {
-        const revealedAnswers = currentRound.answers.filter(a => a.isRevealed);
-        const unrevealedCount = currentRound.answers.length - revealedAnswers.length;
+        const revealedAnswers = currentRound.answers?.filter(a => a.isRevealed) || [];
+        const unrevealedCount = (currentRound.answers?.length || 0) - revealedAnswers.length;
 
         return (
             <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full h-full animate-fade-in relative">
@@ -147,7 +147,7 @@ export function GameView({ socket, gameState, selfId }) {
                             <span className="text-lg font-black text-pink-400">{myPlayer?.score || 0}</span>
                         </div>
                         <div className="relative">
-                            <Avatar seed={myPlayer?.avatar} size="sm" className="w-8 h-8" />
+                            <Avatar seed={myPlayer?.avatar || 'guest'} size="sm" className="w-8 h-8" />
                             {scoreChange && (
                                 <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-2xl font-black text-green-400 animate-float-up pointer-events-none" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                                     +{scoreChange.amount}

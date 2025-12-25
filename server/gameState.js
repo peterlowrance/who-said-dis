@@ -11,23 +11,26 @@ class GameState {
             answers: [], // { playerId, text, revealed }
             guesses: [], // { guesserId, targetId, authorId, correct }
             readerId: null,
-            guessedPlayers: [] // ids of players whose answers have been guessed
+            guessedPlayers: [], // ids of players whose answers have been guessed
+            eliminationOrder: [] // array of player IDs in the order they were eliminated
         };
+        this.previousRoundEliminationOrder = []; // store elimination order from the previous round
         this.usedPrompts = new Set();
     }
 
     addPlayer(socketId, name, avatar) {
-        // Check if name already taken (simple check)
-        const existingName = this.players.find(p => p.name === name);
-        if (existingName) {
-            // If disconnected, maybe reclaim? For now, just return null or error?
-            // Let's assume unique names for simplicity or append #
+        // Check if name already taken and append a counter if so
+        let finalName = name;
+        let counter = 2;
+        while (this.players.some(p => p.name === finalName)) {
+            finalName = `${name} ${counter}`;
+            counter++;
         }
 
         const player = {
             id: randomUUID(),
             socketId,
-            name,
+            name: finalName,
             avatar,
             score: 0,
             connected: true
@@ -46,6 +49,15 @@ class GameState {
         return null;
     }
 
+    // Helper function to shuffle an array using Fisher-Yates algorithm
+    shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
     disconnectPlayer(socketId) {
         const player = this.players.find(p => p.socketId === socketId);
         if (player) {
@@ -57,6 +69,15 @@ class GameState {
         const index = this.players.findIndex(p => p.socketId === socketId);
         if (index !== -1) {
             this.players.splice(index, 1);
+        }
+        
+        // Same check for WRITING phase
+        if (this.status === 'WRITING') {
+            const writers = this.players.filter(p => p.connected);
+            if (this.currentRound.answers.length >= writers.length && writers.length > 0) {
+                this.shuffleArray(this.currentRound.answers);
+                this.status = 'READING';
+            }
         }
     }
 
@@ -71,6 +92,9 @@ class GameState {
     nextRound() {
         this.status = 'WRITING';
 
+        // Save the current round's elimination order as the previous round's elimination order
+        this.previousRoundEliminationOrder = [...this.currentRound.eliminationOrder];
+
         // Pick a random prompt
         let availablePrompts = prompts.filter(p => !this.usedPrompts.has(p));
         if (availablePrompts.length === 0) {
@@ -80,9 +104,16 @@ class GameState {
         const prompt = availablePrompts[Math.floor(Math.random() * availablePrompts.length)];
         this.usedPrompts.add(prompt);
 
-        // Rotate reader
+        // Rotate reader to next CONNECTED player
         const currentReaderIndex = this.players.findIndex(p => p.id === this.currentRound.readerId);
-        const nextReaderIndex = (currentReaderIndex + 1) % this.players.length;
+        let nextReaderIndex = (currentReaderIndex + 1) % this.players.length;
+        
+        let attempts = 0;
+        while (!this.players[nextReaderIndex]?.connected && attempts < this.players.length) {
+            nextReaderIndex = (nextReaderIndex + 1) % this.players.length;
+            attempts++;
+        }
+        
         const readerId = this.players[nextReaderIndex]?.id || this.players[0].id;
 
         this.currentRound = {
@@ -90,25 +121,47 @@ class GameState {
             answers: [],
             guesses: [],
             readerId,
-            readerId,
             guessedPlayers: [],
+            eliminationOrder: [],
             revealedCount: 0
         };
 
-        // Determine first guesser (player to the left of the reader)
-        const readerIndex = this.players.findIndex(p => p.id === readerId);
-        let firstGuesserIndex = (readerIndex + 1) % this.players.length;
-        // Skip reader if they are the first guesser
-        while (this.players[firstGuesserIndex].id === readerId) {
-            firstGuesserIndex = (firstGuesserIndex + 1) % this.players.length;
+        // Determine first guesser based on elimination order from previous round
+        // Players who were eliminated first in the previous round guess first
+        // The player who survived the longest (last eliminated) guesses last
+        // If no previous round (this is the first round), start with player after the reader
+
+        let firstGuesserId;
+        if (this.previousRoundEliminationOrder && this.previousRoundEliminationOrder.length > 0) {
+            // Find the first player in the previous round's elimination order who is still in the game
+            for (const eliminatedPlayerId of this.previousRoundEliminationOrder) {
+                if (this.players.some(p => p.id === eliminatedPlayerId && p.connected)) {
+                    firstGuesserId = eliminatedPlayerId;
+                    break;
+                }
+            }
+
+            // If no eliminated players from the previous round are still in the game,
+            // or the previous elimination order is empty, fall back to the default logic (player after reader)
+            if (!firstGuesserId) {
+                const readerIndex = this.players.findIndex(p => p.id === readerId);
+                let fallbackGuesserIndex = (readerIndex + 1) % this.players.length;
+                firstGuesserId = this.players[fallbackGuesserIndex].id;
+            }
+        } else {
+            // This is the first round, use the default logic (player after reader)
+            const readerIndex = this.players.findIndex(p => p.id === readerId);
+            let firstGuesserIndex = (readerIndex + 1) % this.players.length;
+            firstGuesserId = this.players[firstGuesserIndex].id;
         }
-        this.currentRound.guesserId = this.players[firstGuesserIndex].id;
+
+        this.currentRound.guesserId = firstGuesserId;
     }
 
     submitAnswer(playerId, text) {
         if (this.status !== 'WRITING') return false;
         // Reader CAN write now
-        // if (playerId === this.currentRound.readerId) return false; 
+        // if (playerId === this.currentRound.readerId) return false;
 
         const existing = this.currentRound.answers.find(a => a.playerId === playerId);
         if (existing) {
@@ -120,6 +173,8 @@ class GameState {
         // Check if all players have submitted
         const writers = this.players.filter(p => p.connected);
         if (this.currentRound.answers.length >= writers.length) {
+            // Shuffle the answers to randomize the order they will be revealed in
+            this.shuffleArray(this.currentRound.answers);
             this.status = 'READING';
         }
         return true;
@@ -171,6 +226,9 @@ class GameState {
             answer.isGuessed = true;
             this.currentRound.guessedPlayers.push(targetPlayerId);
 
+            // Add the eliminated player to the elimination order
+            this.currentRound.eliminationOrder.push(targetPlayerId);
+
             const guesser = this.players.find(p => p.id === guesserId);
             if (guesser) guesser.score += 1;
 
@@ -180,15 +238,17 @@ class GameState {
 
             // Round over if all answers guessed OR the only remaining answer belongs to the guesser
             if (unguessedAnswers.length === 0 || answersNotBelongingToGuesser.length === 0) {
-                // Award +3 points to the last remaining player (if any) whose answer wasn't guessed
+                // Award +1 point to the last remaining player (if any) whose answer wasn't guessed
                 // This usually happens if answersNotBelongingToGuesser.length === 0 but unguessedAnswers.length > 0
                 // The remaining answer belongs to the current guesser (who survived till the end)
                 if (unguessedAnswers.length === 1) {
                     const survivorId = unguessedAnswers[0].playerId;
                     const survivor = this.players.find(p => p.id === survivorId);
                     if (survivor) {
-                        survivor.score += 3;
+                        survivor.score += 1;
                     }
+                    // Add the survivor to the elimination order as the last eliminated (survived the longest)
+                    this.currentRound.eliminationOrder.push(survivorId);
                 }
 
                 this.status = 'SCORING';
@@ -207,30 +267,70 @@ class GameState {
     }
 
     advanceTurn() {
-        // Find next player after current guesser who is not reader and not eliminated
-        // Wait, eliminated players can't guess.
-        // Also reader doesn't guess? "One player is the reader... All other players write... Players take turns guessing."
-        // Usually reader doesn't guess.
+        // Find the next player to guess based on the previous round's elimination order
+        // This ensures all players get turns in the order they were eliminated last round
 
-        let currentIndex = this.players.findIndex(p => p.id === this.currentRound.guesserId);
-        let nextIndex = (currentIndex + 1) % this.players.length;
+        // If there's no previous elimination order, fall back to the default sequential logic
+        if (!this.previousRoundEliminationOrder || this.previousRoundEliminationOrder.length === 0) {
+            // Original fallback logic: sequential order
+            let currentIndex = this.players.findIndex(p => p.id === this.currentRound.guesserId);
+            let nextIndex = (currentIndex + 1) % this.players.length;
 
-        // Loop until we find a valid guesser
+            // Loop until we find a valid guesser
+            let attempts = 0;
+            while (attempts < this.players.length) {
+                const p = this.players[nextIndex];
+                const isEliminated = this.currentRound.guessedPlayers.includes(p.id);
+
+                if (!isEliminated) {
+                    this.currentRound.guesserId = p.id;
+                    return;
+                }
+                nextIndex = (nextIndex + 1) % this.players.length;
+                attempts++;
+            }
+            return; // If no one found, round might be over
+        }
+
+        // Use the previous round's elimination order for determining next guesser
+        // Find the current guesser's position in the elimination order
+        const currentIndex = this.previousRoundEliminationOrder.indexOf(this.currentRound.guesserId);
+
+        // Find the next non-eliminated player in the elimination order sequence
         let attempts = 0;
+        let nextIndexInOrder = (currentIndex + 1) % this.previousRoundEliminationOrder.length;
+
+        while (attempts < this.previousRoundEliminationOrder.length) {
+            const playerId = this.previousRoundEliminationOrder[nextIndexInOrder];
+            const player = this.players.find(p => p.id === playerId);
+
+            // Check if the player exists and hasn't been eliminated in the current round
+            if (player && !this.currentRound.guessedPlayers.includes(playerId)) {
+                this.currentRound.guesserId = playerId;
+                return;
+            }
+
+            nextIndexInOrder = (nextIndexInOrder + 1) % this.previousRoundEliminationOrder.length;
+            attempts++;
+        }
+
+        // Fallback if no player found in elimination order (shouldn't happen in normal gameplay)
+        // Use original logic
+        let fallbackIndex = this.players.findIndex(p => p.id === this.currentRound.guesserId);
+        let nextFallbackIndex = (fallbackIndex + 1) % this.players.length;
+
+        attempts = 0;
         while (attempts < this.players.length) {
-            const p = this.players[nextIndex];
-            // Reader CAN guess now
-            // const isReader = p.id === this.currentRound.readerId;
+            const p = this.players[nextFallbackIndex];
             const isEliminated = this.currentRound.guessedPlayers.includes(p.id);
 
             if (!isEliminated) {
                 this.currentRound.guesserId = p.id;
                 return;
             }
-            nextIndex = (nextIndex + 1) % this.players.length;
+            nextFallbackIndex = (nextFallbackIndex + 1) % this.players.length;
             attempts++;
         }
-        // If no one found, round might be over.
     }
 }
 
