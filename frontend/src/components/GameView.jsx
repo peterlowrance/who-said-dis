@@ -13,6 +13,7 @@ export function GameView({ socket, gameState, selfId }) {
     const isGuesser = currentRound.guesserId === selfId;
     const myAnswer = currentRound.answers.find(a => a.playerId === selfId);
     const myPlayer = players.find(p => p.id === selfId);
+    const readerPlayer = players.find(p => p.id === currentRound.readerId);
 
     const [lastGuessResult, setLastGuessResult] = useState(null); // { correct: boolean, message: string }
 
@@ -167,6 +168,23 @@ export function GameView({ socket, gameState, selfId }) {
                             Responses
                         </h3>
                         <div className="grid gap-3">
+                            {/* Reveal Controls (at the top) */}
+                            {status === 'READING' && unrevealedCount > 0 && (
+                                isReader ? (
+                                    <button
+                                        onClick={handleReveal}
+                                        className="w-full p-6 rounded-xl border-2 border-dashed border-pink-500/50 bg-pink-500/10 hover:bg-pink-500/20 hover:border-pink-400 transition-all flex items-center justify-center gap-4 group animate-pulse-slow ring-1 ring-pink-500/30"
+                                    >
+                                        <span className="text-3xl group-hover:scale-110 transition-transform">🃏</span>
+                                        <p className="font-black text-pink-300">Reveal Next Answer</p>
+                                    </button>
+                                ) : (
+                                    <div className="w-full p-4 rounded-xl border-2 border-dashed border-white/10 bg-black/20 flex items-center justify-center opacity-50">
+                                        <span className="text-sm italic text-white/40">Reader is revealing answers...</span>
+                                    </div>
+                                )
+                            )}
+
                             {/* Revealed Answers */}
                             {revealedAnswers.map((ans, i) => {
                                 const isGuessed = ans.isGuessed;
@@ -221,34 +239,30 @@ export function GameView({ socket, gameState, selfId }) {
                                     </div>
                                 );
                             })}
-
-                            {/* Reveal Next Button (Only for Reader in Reading Phase) */}
-                            {status === 'READING' && isReader && unrevealedCount > 0 && (
-                                <button
-                                    onClick={handleReveal}
-                                    className="w-full p-4 rounded-xl border-2 border-dashed border-white/20 bg-white/5 hover:bg-white/10 hover:border-pink-400/50 transition-all flex items-center justify-center gap-3 group animate-pulse-slow"
-                                >
-                                    <span className="text-2xl group-hover:scale-110 transition-transform">🃏</span>
-                                    <span className="font-bold text-white/60 group-hover:text-pink-300">Click to Reveal Next Answer</span>
-                                </button>
-                            )}
-
-                            {/* Hidden Answer Placeholders (for non-readers) */}
-                            {status === 'READING' && !isReader && unrevealedCount > 0 && (
-                                <div className="w-full p-4 rounded-xl border-2 border-dashed border-white/10 bg-black/20 flex items-center justify-center opacity-50">
-                                    <span className="text-sm italic text-white/40">Waiting for reader to reveal...</span>
-                                </div>
-                            )}
                         </div>
                     </div>
 
                     {/* Sidebar: Status & Actions */}
-                    <div className="glass-panel p-4 flex flex-col gap-4 h-fit">
+                    <div className="glass-panel p-4 flex flex-col gap-4 h-fit order-first md:order-last">
                         {status === 'READING' && (
-                            <div className="text-center py-8">
-                                <div className="text-4xl mb-4">📖</div>
-                                <h3 className="text-xl font-bold">Reading Phase</h3>
-                                <p className="text-white/60 mt-2">The Reader is revealing the answers.</p>
+                            <div className="space-y-4">
+                                <div className="text-center border-b border-white/10 pb-4">
+                                    <p className="text-sm uppercase tracking-wider opacity-60">Current Reader</p>
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                        <Avatar seed={readerPlayer?.avatar} size="sm" />
+                                        <span className="font-bold text-xl">{readerPlayer?.name}</span>
+                                    </div>
+                                </div>
+                                {isReader ? (
+                                    <div className="p-4 bg-pink-500/20 border border-pink-500/50 rounded-xl text-center animate-pulse-slow">
+                                        <p className="text-xl font-bold text-pink-300">You are the Reader!</p>
+                                        <p className="text-sm text-white/60">Reveal the answers one by one.</p>
+                                    </div>
+                                ) : (
+                                    <div className="text-center opacity-60">
+                                        Waiting for reader to reveal...
+                                    </div>
+                                )}
                             </div>
                         )}
 
