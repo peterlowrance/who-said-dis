@@ -62,7 +62,6 @@ class GameState {
         const player = this.players.find(p => p.socketId === socketId);
         if (player) {
             player.connected = false;
-            player.disconnectedAt = Date.now();
         }
     }
 
@@ -71,7 +70,7 @@ class GameState {
         if (index !== -1) {
             this.players.splice(index, 1);
         }
-        
+
         // Same check for WRITING phase
         if (this.status === 'WRITING') {
             const writers = this.players.filter(p => p.connected);
@@ -108,13 +107,13 @@ class GameState {
         // Rotate reader to next CONNECTED player
         const currentReaderIndex = this.players.findIndex(p => p.id === this.currentRound.readerId);
         let nextReaderIndex = (currentReaderIndex + 1) % this.players.length;
-        
+
         let attempts = 0;
         while (!this.players[nextReaderIndex]?.connected && attempts < this.players.length) {
             nextReaderIndex = (nextReaderIndex + 1) % this.players.length;
             attempts++;
         }
-        
+
         const readerId = this.players[nextReaderIndex]?.id || this.players[0].id;
 
         this.currentRound = {
@@ -173,16 +172,7 @@ class GameState {
 
         // Check if all players have submitted
         // Grace period: give recently disconnected players 5 seconds to rejoin
-        const GRACE_PERIOD = 5000; // 5 seconds
-        const now = Date.now();
-
-        const activeWriters = this.players.filter(p => {
-            if (p.connected) return true; // Connected players count
-            // Disconnected players count if they disconnected recently (within grace period)
-            return p.disconnectedAt && (now - p.disconnectedAt < GRACE_PERIOD);
-        });
-
-        if (this.currentRound.answers.length >= activeWriters.length) {
+        if (this.currentRound.answers.length >= this.players.length) {
             // Shuffle the answers to randomize the order they will be revealed in
             this.shuffleArray(this.currentRound.answers);
             this.status = 'READING';
