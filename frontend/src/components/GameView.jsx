@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar } from './Avatar';
+import { RecapView } from './RecapView';
 import clsx from 'clsx';
 
 export function GameView({ socket, gameState, selfId }) {
@@ -8,6 +9,14 @@ export function GameView({ socket, gameState, selfId }) {
     const [submitted, setSubmitted] = useState(false);
     const [selectedAnswer, setSelectedAnswer] = useState(null); // Text of selected answer
     const [selectedPlayer, setSelectedPlayer] = useState(null); // ID of selected player to guess
+    const [showRecap, setShowRecap] = useState(false);
+
+    // Trigger recap when a new previous round is available (i.e., new round started)
+    React.useEffect(() => {
+        if (gameState.previousRound && gameState.previousRound.prompt) {
+            setShowRecap(true);
+        }
+    }, [gameState.previousRound?.prompt]);
 
     const isReader = currentRound.readerId === selfId;
     const isGuesser = currentRound.guesserId === selfId;
@@ -81,6 +90,14 @@ export function GameView({ socket, gameState, selfId }) {
     if (status === 'WRITING') {
         return (
             <div className="flex flex-col items-center gap-8 max-w-2xl mx-auto w-full animate-fade-in">
+                {showRecap && (
+                    <RecapView
+                        previousRound={gameState.previousRound}
+                        players={players}
+                        selfId={selfId}
+                        onNext={() => setShowRecap(false)}
+                    />
+                )}
                 <div className="glass-panel p-8 w-full text-center space-y-6 relative">
                     {/* Persistent User Info */}
                     <div className="absolute top-2 right-2 flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
@@ -119,7 +136,7 @@ export function GameView({ socket, gameState, selfId }) {
 
 
 
-    if (status === 'READING' || status === 'GUESSING') {
+    if (status === 'READING' || status === 'GUESSING' || status === 'ROUND_OVER') {
         const revealedAnswers = currentRound.answers?.filter(a => a.isRevealed) || [];
         const unrevealedCount = (currentRound.answers?.length || 0) - revealedAnswers.length;
 
@@ -156,7 +173,7 @@ export function GameView({ socket, gameState, selfId }) {
                     <p className="text-2xl font-bold">{currentRound.prompt}</p>
                 </div>
 
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_300px] gap-6 min-h-0">
+                <div className={clsx("flex-1 grid gap-6 min-h-0", status === 'ROUND_OVER' ? "grid-cols-1" : "grid-cols-1 md:grid-cols-[1fr_300px]")}>
                     {/* Answers Grid */}
                     <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 pl-2 -ml-2 pb-20">
 
@@ -231,54 +248,56 @@ export function GameView({ socket, gameState, selfId }) {
                     </div>
 
                     {/* Sidebar: Status & Actions */}
-                    <div className="glass-panel p-4 flex flex-col gap-4 h-fit order-first md:order-last">
-                        {status === 'READING' && (
-                            <div className="space-y-4">
-                                <div className="text-center border-b border-white/10 pb-4">
-                                    <p className="text-sm uppercase tracking-wider opacity-60">Current Reader</p>
-                                    <div className="flex items-center justify-center gap-2 mt-2">
-                                        <Avatar seed={readerPlayer?.avatar} size="sm" />
-                                        <span className="font-bold text-xl">{readerPlayer?.name}</span>
+                    {status !== 'ROUND_OVER' && (
+                        <div className="glass-panel p-4 flex flex-col gap-4 h-fit order-first md:order-last">
+                            {status === 'READING' && (
+                                <div className="space-y-4">
+                                    <div className="text-center border-b border-white/10 pb-4">
+                                        <p className="text-sm uppercase tracking-wider opacity-60">Current Reader</p>
+                                        <div className="flex items-center justify-center gap-2 mt-2">
+                                            <Avatar seed={readerPlayer?.avatar} size="sm" />
+                                            <span className="font-bold text-xl">{readerPlayer?.name}</span>
+                                        </div>
                                     </div>
+                                    {isReader ? (
+                                        <div className="p-4 bg-pink-500/20 border border-pink-500/50 rounded-xl text-center animate-pulse-slow">
+                                            <p className="text-xl font-bold text-pink-300">You are the Reader!</p>
+                                            <p className="text-sm text-white/60">Reveal the answers and read them aloud</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center opacity-60">
+                                            Waiting for reader to reveal...
+                                        </div>
+                                    )}
                                 </div>
-                                {isReader ? (
-                                    <div className="p-4 bg-pink-500/20 border border-pink-500/50 rounded-xl text-center animate-pulse-slow">
-                                        <p className="text-xl font-bold text-pink-300">You are the Reader!</p>
-                                        <p className="text-sm text-white/60">Reveal the answers and read them aloud</p>
-                                    </div>
-                                ) : (
-                                    <div className="text-center opacity-60">
-                                        Waiting for reader to reveal...
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                            )}
 
-                        {status === 'GUESSING' && (
-                            <div className="space-y-4">
-                                <div className={clsx("text-center", (currentRound.guessedPlayers.includes(selfId) || isGuesser) && "border-b border-white/10 pb-4")}>
-                                    <p className="text-sm uppercase tracking-wider opacity-60">Current Guesser</p>
-                                    <div className="flex items-center justify-center gap-2 mt-2">
-                                        <Avatar seed={players.find(p => p.id === currentRound.guesserId)?.avatar} size="sm" />
-                                        <span className="font-bold text-xl">{players.find(p => p.id === currentRound.guesserId)?.name}</span>
+                            {status === 'GUESSING' && (
+                                <div className="space-y-4">
+                                    <div className={clsx("text-center", (currentRound.guessedPlayers.includes(selfId) || isGuesser) && "border-b border-white/10 pb-4")}>
+                                        <p className="text-sm uppercase tracking-wider opacity-60">Current Guesser</p>
+                                        <div className="flex items-center justify-center gap-2 mt-2">
+                                            <Avatar seed={players.find(p => p.id === currentRound.guesserId)?.avatar} size="sm" />
+                                            <span className="font-bold text-xl">{players.find(p => p.id === currentRound.guesserId)?.name}</span>
+                                        </div>
                                     </div>
+
+                                    {currentRound.guessedPlayers.includes(selfId) ? (
+                                        <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-center animate-pulse-slow">
+                                            <p className="text-xl font-bold text-red-300">You are Eliminated!</p>
+                                            <p className="text-sm text-white/60">You can no longer guess this round.</p>
+                                        </div>
+                                    ) : isGuesser && (
+                                        <div className="text-center animate-pulse-slow">
+                                            <p className="font-bold text-pink-300">It's your turn! Select an answer.</p>
+                                        </div>
+                                    )}
+
+
                                 </div>
-
-                                {currentRound.guessedPlayers.includes(selfId) ? (
-                                    <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-center animate-pulse-slow">
-                                        <p className="text-xl font-bold text-red-300">You are Eliminated!</p>
-                                        <p className="text-sm text-white/60">You can no longer guess this round.</p>
-                                    </div>
-                                ) : isGuesser && (
-                                    <div className="text-center animate-pulse-slow">
-                                        <p className="font-bold text-pink-300">It's your turn! Select an answer.</p>
-                                    </div>
-                                )}
-
-
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Guessing Modal */}

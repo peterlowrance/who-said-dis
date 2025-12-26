@@ -124,6 +124,13 @@ io.on('connection', (socket) => {
 
         if (result.success) {
             io.emit('state_update', gameState);
+
+            if (gameState.status === 'ROUND_OVER') {
+                setTimeout(() => {
+                    gameState.nextRound();
+                    io.emit('state_update', gameState);
+                }, 5000);
+            }
         }
     });
 

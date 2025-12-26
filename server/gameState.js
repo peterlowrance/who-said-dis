@@ -92,6 +92,9 @@ class GameState {
     nextRound() {
         this.status = 'WRITING';
 
+        // Archive the current round (deep copy essential for arrays/objects)
+        this.previousRound = JSON.parse(JSON.stringify(this.currentRound));
+
         // Save the current round's elimination order as the previous round's elimination order
         this.previousRoundEliminationOrder = [...this.currentRound.eliminationOrder];
 
@@ -221,9 +224,19 @@ class GameState {
         const answer = this.currentRound.answers.find(a => a.text === answerText && !a.isGuessed);
         if (!answer) return { success: false, message: 'Answer not found or already guessed' };
 
+        const guessData = {
+            guesserId,
+            targetId: targetPlayerId,
+            answerText,
+            correct: false,
+            timestamp: Date.now()
+        };
+
         if (answer.playerId === targetPlayerId) {
             // Correct guess
             answer.isGuessed = true;
+            guessData.correct = true;
+            this.currentRound.guesses.push(guessData);
             this.currentRound.guessedPlayers.push(targetPlayerId);
 
             // Add the eliminated player to the elimination order
@@ -251,7 +264,7 @@ class GameState {
                     this.currentRound.eliminationOrder.push(survivorId);
                 }
 
-                this.status = 'SCORING';
+                this.status = 'ROUND_OVER';
             }
 
             // Guesser goes again if correct
@@ -259,6 +272,7 @@ class GameState {
         } else {
             // Incorrect guess
             answer.wrongGuesses.push(targetPlayerId);
+            this.currentRound.guesses.push(guessData);
 
             // Turn passes to next non-eliminated player
             this.advanceTurn();

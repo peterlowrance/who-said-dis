@@ -81,13 +81,11 @@ function App() {
         <Lobby socket={socket} players={gameState.players} selfId={selfId} />
       )}
 
-      {(gameState.status === 'WRITING' || gameState.status === 'READING' || gameState.status === 'GUESSING') && (
+      {(gameState.status === 'WRITING' || gameState.status === 'READING' || gameState.status === 'GUESSING' || gameState.status === 'ROUND_OVER') && (
         <GameView socket={socket} gameState={gameState} selfId={selfId} />
       )}
 
-      {gameState.status === 'SCORING' && (
-        <Scoreboard players={gameState.players} gameState={gameState} socket={socket} />
-      )}
+
 
       {/* Debug Info (Optional) */}
       {/* <div className="fixed bottom-2 right-2 text-xs text-white/20 pointer-events-none">
