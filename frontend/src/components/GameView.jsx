@@ -36,34 +36,46 @@ export function GameView({ socket, gameState, selfId }) {
         return () => socket.off('guess_result', handleGuessResult);
     }, [socket]);
 
+    const [scoreChange, setScoreChange] = useState(null); // { amount: number, id: string }
+
+    // Listen for score updates to trigger animation
+    React.useEffect(() => {
+        const handleStateUpdate = (newState) => {
+            const oldMe = myPlayer;
+            const newMe = newState.players.find(p => p.id === selfId);
+
+            if (oldMe && newMe && newMe.score > oldMe.score) {
+                const diff = newMe.score - oldMe.score;
+                setScoreChange({ amount: diff, id: Date.now() });
+                setTimeout(() => setScoreChange(null), 2000);
+            }
+        };
+
+        socket.on('state_update', handleStateUpdate);
+        return () => socket.off('state_update', handleStateUpdate);
+    }, [socket, myPlayer, selfId]);
+
     const handleSubmit = () => {
         if (!answer.trim()) return;
-        socket.emit('submit_answer', { text: answer });
+        socket.emit('submit_answer', { text: answer, playerId: selfId });
         setSubmitted(true);
     };
 
     const handleReveal = () => {
-        socket.emit('reveal_answer');
+        socket.emit('reveal_answer', { playerId: selfId });
     };
 
     const handleGuess = () => {
         if (!selectedAnswer || !selectedPlayer) return;
-        socket.emit('make_guess', { targetPlayerId: selectedPlayer, answerText: selectedAnswer }, (response) => {
+        socket.emit('make_guess', { targetPlayerId: selectedPlayer, answerText: selectedAnswer, playerId: selfId }, (response) => {
             // Callback if server supports it, otherwise use event listener above
-            // Our server currently returns result in makeGuess but doesn't emit it specifically to the caller via callback in the socket handler in index.js
-            // We need to check index.js if it sends a callback or emits an event.
-            // Looking at index.js (from memory/context), it emits 'state_update'.
-            // We might need to add a specific event for the result or use the callback.
-            // Let's assume we need to update index.js to emit 'guess_result' or send callback.
-            // For now, let's rely on state update for visual changes, but for the TOAST we need the result.
-            // I'll add a listener for 'guess_result' which I should ensure the server emits.
         });
         setSelectedAnswer(null);
         setSelectedPlayer(null);
     };
 
     const handleNextRound = () => {
-        socket.emit('next_round');
+        socket.emit('next_round', { playerId: selfId });
     };
 
     if (status === 'WRITING') {
@@ -105,24 +117,7 @@ export function GameView({ socket, gameState, selfId }) {
         );
     }
 
-    const [scoreChange, setScoreChange] = useState(null); // { amount: number, id: string }
 
-    // Listen for score updates to trigger animation
-    React.useEffect(() => {
-        const handleStateUpdate = (newState) => {
-            const oldMe = myPlayer;
-            const newMe = newState.players.find(p => p.id === selfId);
-
-            if (oldMe && newMe && newMe.score > oldMe.score) {
-                const diff = newMe.score - oldMe.score;
-                setScoreChange({ amount: diff, id: Date.now() });
-                setTimeout(() => setScoreChange(null), 2000);
-            }
-        };
-
-        socket.on('state_update', handleStateUpdate);
-        return () => socket.off('state_update', handleStateUpdate);
-    }, [socket, myPlayer, selfId]);
 
     if (status === 'READING' || status === 'GUESSING') {
         const revealedAnswers = currentRound.answers?.filter(a => a.isRevealed) || [];
@@ -163,25 +158,18 @@ export function GameView({ socket, gameState, selfId }) {
 
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_300px] gap-6 min-h-0">
                     {/* Answers Grid */}
-                    <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 pb-20">
-                        <h3 className="text-lg font-bold opacity-80 sticky top-0 bg-indigo-900/90 backdrop-blur-sm py-2 z-10">
-                            Responses
-                        </h3>
+                    <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 pl-2 -ml-2 pb-20">
+
                         <div className="grid gap-3">
                             {/* Reveal Controls (at the top) */}
                             {status === 'READING' && unrevealedCount > 0 && (
-                                isReader ? (
+                                isReader && (
                                     <button
                                         onClick={handleReveal}
-                                        className="w-full p-6 rounded-xl border-2 border-dashed border-pink-500/50 bg-pink-500/10 hover:bg-pink-500/20 hover:border-pink-400 transition-all flex items-center justify-center gap-4 group animate-pulse-slow ring-1 ring-pink-500/30"
+                                        className="w-full p-6 rounded-xl border-2 border-dashed border-cyan-500/50 bg-cyan-500/10 hover:bg-cyan-500/20 hover:border-cyan-400 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] active:scale-[0.98] active:bg-cyan-500/30 transition-all duration-200 flex items-center justify-center gap-4 group animate-pulse-slow ring-1 ring-cyan-500/30"
                                     >
-                                        <span className="text-3xl group-hover:scale-110 transition-transform">🃏</span>
-                                        <p className="font-black text-pink-300">Reveal Next Answer</p>
+                                        <p className="font-black text-cyan-300">Reveal Next Answer</p>
                                     </button>
-                                ) : (
-                                    <div className="w-full p-4 rounded-xl border-2 border-dashed border-white/10 bg-black/20 flex items-center justify-center opacity-50">
-                                        <span className="text-sm italic text-white/40">Reader is revealing answers...</span>
-                                    </div>
                                 )
                             )}
 
@@ -201,9 +189,9 @@ export function GameView({ socket, gameState, selfId }) {
                                             isGuessed
                                                 ? "bg-green-500/20 border-green-500/50"
                                                 : isSelected
-                                                    ? "bg-pink-500/20 border-pink-500 cursor-pointer ring-2 ring-pink-500"
+                                                    ? "bg-cyan-500/20 border-cyan-500 cursor-pointer ring-2 ring-cyan-500"
                                                     : status === 'GUESSING' && isGuesser
-                                                        ? "bg-white/5 border-white/10 hover:bg-white/10 cursor-pointer hover:scale-[1.02]"
+                                                        ? "bg-white/5 border-2 border-dashed border-white/30 hover:border-cyan-400 hover:bg-cyan-500/10 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)] cursor-pointer hover:scale-[1.02]"
                                                         : "bg-white/5 border-white/10"
                                         )}
                                     >
@@ -256,7 +244,7 @@ export function GameView({ socket, gameState, selfId }) {
                                 {isReader ? (
                                     <div className="p-4 bg-pink-500/20 border border-pink-500/50 rounded-xl text-center animate-pulse-slow">
                                         <p className="text-xl font-bold text-pink-300">You are the Reader!</p>
-                                        <p className="text-sm text-white/60">Reveal the answers one by one.</p>
+                                        <p className="text-sm text-white/60">Reveal the answers and read them aloud</p>
                                     </div>
                                 ) : (
                                     <div className="text-center opacity-60">
@@ -318,7 +306,7 @@ export function GameView({ socket, gameState, selfId }) {
                                             className={clsx(
                                                 "flex flex-col items-center p-4 rounded-xl transition-all",
                                                 selectedPlayer === p.id
-                                                    ? "bg-pink-500/40 ring-2 ring-pink-500 scale-105"
+                                                    ? "bg-cyan-500/40 ring-2 ring-cyan-500 scale-105"
                                                     : "bg-white/5 hover:bg-white/10 hover:scale-105"
                                             )}
                                         >

@@ -73,25 +73,48 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('reveal_answer', () => {
+    // Helper to find player by socket ID OR by playerId (and heal connection)
+    const findActivePlayerOrHeal = (socketId, providedPlayerId) => {
+        // 1. Try to find by socket ID (standard)
+        let player = gameState.players.find(p => p.socketId === socketId);
+        if (player) return player;
+
+        // 2. If not found, try to heal using provided playerId
+        if (providedPlayerId) {
+            player = gameState.players.find(p => p.id === providedPlayerId);
+            if (player) {
+                console.log(`Connection Healing: Player ${player.name} (${player.id}) rejoined implicitly from new socket ${socketId}`);
+                player.socketId = socketId;
+                player.connected = true;
+                player.disconnectedAt = null; // Clear disconnection time
+                return player;
+            }
+        }
+        return null;
+    };
+
+    socket.on('reveal_answer', ({ playerId } = {}) => {
         // Only reader can reveal
-        if (gameState.currentRound.readerId !== gameState.players.find(p => p.socketId === socket.id)?.id) return;
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+        if (!player) return;
+
+        if (gameState.currentRound.readerId !== player.id) return;
 
         if (gameState.revealNextAnswer()) {
             io.emit('state_update', gameState);
         }
     });
 
-    socket.on('submit_answer', ({ text }) => {
-        // We need to find the player by socket.id to get their persistent ID
-        const player = gameState.players.find(p => p.socketId === socket.id);
+    socket.on('submit_answer', ({ text, playerId }) => {
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+
         if (player && gameState.submitAnswer(player.id, text)) {
             io.emit('state_update', gameState);
         }
     });
 
-    socket.on('make_guess', ({ targetPlayerId, answerText }) => {
-        const player = gameState.players.find(p => p.socketId === socket.id);
+    socket.on('make_guess', ({ targetPlayerId, answerText, playerId }) => {
+        const player = findActivePlayerOrHeal(socket.id, playerId);
         if (!player) return;
 
         const result = gameState.makeGuess(player.id, targetPlayerId, answerText);
@@ -104,7 +127,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('next_round', () => {
+    socket.on('next_round', ({ playerId } = {}) => {
+        // Verify player is in the game (optional, but good for healing)
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+        if (!player) return;
+
         // Only allow if round is over? Or anytime?
         // Usually reader decides or automatic.
         // Let's allow any player to trigger next round for now if status is GUESSING/SCORING

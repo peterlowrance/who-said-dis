@@ -3,15 +3,13 @@ import { Avatar } from './Avatar';
 
 export function Lobby({ socket, players, selfId }) {
     const [name, setName] = useState('');
-    const [randomSuffix, setRandomSuffix] = useState('');
+    const [avatarSeed, setAvatarSeed] = useState('');
     const [joined, setJoined] = useState(false);
 
-    // Generate random suffix on mount
+    // Generate random seed on mount
     useEffect(() => {
-        setRandomSuffix(Math.random().toString(36).substring(7));
+        setAvatarSeed(Math.random().toString(36).substring(7));
     }, []);
-
-    const avatarSeed = name + randomSuffix;
 
     const handleJoin = () => {
         if (!name.trim()) return;
@@ -20,7 +18,7 @@ export function Lobby({ socket, players, selfId }) {
     };
 
     const handleRegenerate = () => {
-        setRandomSuffix(Math.random().toString(36).substring(7));
+        setAvatarSeed(Math.random().toString(36).substring(7));
     };
 
     const handleStart = () => {

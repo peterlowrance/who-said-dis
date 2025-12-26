@@ -62,6 +62,7 @@ class GameState {
         const player = this.players.find(p => p.socketId === socketId);
         if (player) {
             player.connected = false;
+            player.disconnectedAt = Date.now();
         }
     }
 
@@ -171,8 +172,17 @@ class GameState {
         }
 
         // Check if all players have submitted
-        const writers = this.players.filter(p => p.connected);
-        if (this.currentRound.answers.length >= writers.length) {
+        // Grace period: give recently disconnected players 5 seconds to rejoin
+        const GRACE_PERIOD = 5000; // 5 seconds
+        const now = Date.now();
+
+        const activeWriters = this.players.filter(p => {
+            if (p.connected) return true; // Connected players count
+            // Disconnected players count if they disconnected recently (within grace period)
+            return p.disconnectedAt && (now - p.disconnectedAt < GRACE_PERIOD);
+        });
+
+        if (this.currentRound.answers.length >= activeWriters.length) {
             // Shuffle the answers to randomize the order they will be revealed in
             this.shuffleArray(this.currentRound.answers);
             this.status = 'READING';
