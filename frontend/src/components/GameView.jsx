@@ -256,7 +256,7 @@ export function GameView({ socket, gameState, selfId }) {
 
                         {status === 'GUESSING' && (
                             <div className="space-y-4">
-                                <div className="text-center border-b border-white/10 pb-4">
+                                <div className={clsx("text-center", (currentRound.guessedPlayers.includes(selfId) || isGuesser) && "border-b border-white/10 pb-4")}>
                                     <p className="text-sm uppercase tracking-wider opacity-60">Current Guesser</p>
                                     <div className="flex items-center justify-center gap-2 mt-2">
                                         <Avatar seed={players.find(p => p.id === currentRound.guesserId)?.avatar} size="sm" />
@@ -269,14 +269,9 @@ export function GameView({ socket, gameState, selfId }) {
                                         <p className="text-xl font-bold text-red-300">You are Eliminated!</p>
                                         <p className="text-sm text-white/60">You can no longer guess this round.</p>
                                     </div>
-                                ) : isGuesser ? (
-                                    <div className="space-y-4 animate-pulse-slow">
-                                        <p className="text-center font-bold text-pink-300">It's your turn!</p>
-                                        <p className="text-sm text-center opacity-80">Select an answer to guess.</p>
-                                    </div>
-                                ) : (
-                                    <div className="text-center opacity-60">
-                                        Waiting for guess...
+                                ) : isGuesser && (
+                                    <div className="text-center animate-pulse-slow">
+                                        <p className="font-bold text-pink-300">It's your turn! Select an answer.</p>
                                     </div>
                                 )}
 
