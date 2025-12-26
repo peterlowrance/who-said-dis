@@ -127,8 +127,11 @@ io.on('connection', (socket) => {
 
             if (gameState.status === 'ROUND_OVER') {
                 setTimeout(() => {
-                    gameState.nextRound();
-                    io.emit('state_update', gameState);
+                    // Double check status hasn't been advanced by a manual trigger
+                    if (gameState.status === 'ROUND_OVER') {
+                        gameState.nextRound();
+                        io.emit('state_update', gameState);
+                    }
                 }, 5000);
             }
         }
@@ -139,12 +142,47 @@ io.on('connection', (socket) => {
         const player = findActivePlayerOrHeal(socket.id, playerId);
         if (!player) return;
 
-        // Only allow if round is over? Or anytime?
-        // Usually reader decides or automatic.
-        // Let's allow any player to trigger next round for now if status is GUESSING/SCORING
-        gameState.nextRound();
-        io.emit('state_update', gameState);
+        // Only allow if we aren't already in the writing phase
+        if (gameState.status !== 'WRITING') {
+            gameState.nextRound();
+            io.emit('state_update', gameState);
+        }
     });
+
+    // ========== Minigame Events ==========
+
+    // Player joined the waiting minigame
+    socket.on('minigame_join', ({ playerId }) => {
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+        if (!player) return;
+
+        // Broadcast to other players that this player joined the minigame
+        socket.broadcast.emit('minigame_player_joined', {
+            playerId: player.id,
+            avatar: player.avatar
+        });
+    });
+
+    // Player launched their avatar in the minigame
+    socket.on('minigame_launch', ({ playerId, angle, power }) => {
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+        if (!player) return;
+
+        // Broadcast to other players so they can simulate the launch
+        socket.broadcast.emit('minigame_launch', {
+            playerId: player.id,
+            angle,
+            power
+        });
+    });
+
+    // Player popped a bubble (for potential future scoring/tracking)
+    socket.on('minigame_bubble_popped', ({ playerId, bubbleId }) => {
+        // Currently just for tracking - could add server-side pop count later
+        // No broadcast needed since bubbles are client-side per player
+    });
+
+    // ======================================
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);

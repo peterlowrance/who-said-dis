@@ -58,7 +58,7 @@ export function RecapView({ previousRound, players, onNext, selfId }) {
                                             <div className="flex items-center gap-2 text-green-300">
                                                 <span className="opacity-70">Guessed by:</span>
                                                 <div className="flex items-center gap-1.5 font-bold">
-                                                    <Avatar seed={players.find(p => p.id === correctGuess.guesserId)?.avatar} size="xs" className="w-4 h-4" />
+                                                    <Avatar seed={players.find(p => p.id === correctGuess.guesserId)?.avatar} size="xs" />
                                                     {players.find(p => p.id === correctGuess.guesserId)?.name}
                                                 </div>
                                                 <span className="text-xs font-black text-green-400 bg-green-500/20 px-1.5 py-0.5 rounded-full">+1</span>
@@ -100,8 +100,8 @@ export function RecapView({ previousRound, players, onNext, selfId }) {
             </div>
 
             {/* Bottom Bar: Scores & Action */}
-            <div className="shrink-0 p-6 glass-panel border-t border-white/10 bg-black/40 backdrop-blur-xl">
-                <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-6 justify-between">
+            <div className="shrink-0 py-2 px-6 glass-panel border-t border-white/10 bg-black/40 backdrop-blur-xl">
+                <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between">
 
                     {/* Mini Scoreboard */}
                     <div className="flex items-center gap-4 overflow-x-auto max-w-full pb-2 md:pb-0 custom-scrollbar mask-fade-right">

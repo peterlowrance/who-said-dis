@@ -4,6 +4,7 @@ import clsx from 'clsx';
 
 export function Avatar({ seed, size = 'md', className, onClick }) {
     const sizeMap = {
+        xs: 24,
         sm: 40,
         md: 64,
         lg: 96
@@ -22,6 +23,7 @@ export function Avatar({ seed, size = 'md', className, onClick }) {
     }, [seed, pixelSize]);
 
     const sizes = {
+        xs: 'w-6 h-6',
         sm: 'w-10 h-10',
         md: 'w-16 h-16',
         lg: 'w-24 h-24'

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Avatar } from './Avatar';
 import { RecapView } from './RecapView';
+import { BubblePopGame } from '../minigame/BubblePopGame';
 import clsx from 'clsx';
 
 export function GameView({ socket, gameState, selfId }) {
@@ -17,6 +18,12 @@ export function GameView({ socket, gameState, selfId }) {
             setShowRecap(true);
         }
     }, [gameState.previousRound?.prompt]);
+
+    // Reset submission state when a new round starts
+    React.useEffect(() => {
+        setSubmitted(false);
+        setAnswer('');
+    }, [currentRound.prompt]);
 
     const isReader = currentRound.readerId === selfId;
     const isGuesser = currentRound.guesserId === selfId;
@@ -44,6 +51,24 @@ export function GameView({ socket, gameState, selfId }) {
         socket.on('guess_result', handleGuessResult);
         return () => socket.off('guess_result', handleGuessResult);
     }, [socket]);
+
+    const [showYourTurn, setShowYourTurn] = useState(false);
+
+    // Detect when it becomes your turn (but not if you just made a correct guess)
+    React.useEffect(() => {
+        if (status === 'GUESSING' && currentRound.guesserId === selfId && !currentRound.guessedPlayers.includes(selfId)) {
+            // Don't show "Your Turn" if we just made a correct guess
+            if (lastGuessResult?.correct) {
+                setShowYourTurn(false);
+                return;
+            }
+            setShowYourTurn(true);
+            const timer = setTimeout(() => setShowYourTurn(false), 2000);
+            return () => clearTimeout(timer);
+        } else {
+            setShowYourTurn(false);
+        }
+    }, [currentRound.guesserId, status, selfId, currentRound.guessedPlayers, lastGuessResult]);
 
     const [scoreChange, setScoreChange] = useState(null); // { amount: number, id: string }
 
@@ -111,9 +136,21 @@ export function GameView({ socket, gameState, selfId }) {
                     </div>
 
                     {submitted || myAnswer ? (
-                        <div className="p-8 bg-green-500/20 border border-green-500/50 rounded-xl">
-                            <p className="text-xl font-bold text-green-200">Answer Submitted!</p>
-                            <p className="text-white/60">Waiting for others...</p>
+                        <div className="space-y-4">
+                            <div className="p-4 bg-green-500/20 border border-green-500/50 rounded-xl text-center">
+                                <p className="text-lg font-bold text-green-200">Answer Submitted! 🎉</p>
+                                <p className="text-sm text-white/60">Pop some bubbles while you wait!</p>
+                            </div>
+                            <BubblePopGame
+                                socket={socket}
+                                selfId={selfId}
+                                syncSeed={currentRound.prompt}
+                                myAvatar={myPlayer?.avatar}
+                                otherPlayers={players.filter(p =>
+                                    p.id !== selfId &&
+                                    currentRound.answers.some(a => a.playerId === p.id)
+                                )}
+                            />
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -149,6 +186,13 @@ export function GameView({ socket, gameState, selfId }) {
                         lastGuessResult.correct ? "bg-green-500 text-white" : "bg-red-500 text-white"
                     )}>
                         {lastGuessResult.message}
+                    </div>
+                )}
+
+                {/* Your Turn Toast */}
+                {showYourTurn && (
+                    <div className="fixed top-36 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full font-bold text-xl shadow-2xl animate-bounce-in bg-cyan-500 text-white">
+                        Your Turn!
                     </div>
                 )}
 
@@ -217,11 +261,11 @@ export function GameView({ socket, gameState, selfId }) {
                                         {/* Wrong Guesses Display */}
                                         {wrongGuesses.length > 0 && !isGuessed && (
                                             <div className="mt-3 flex flex-wrap gap-2">
-                                                {wrongGuesses.map(pid => {
+                                                {wrongGuesses.map((pid, idx) => {
                                                     const p = players.find(pl => pl.id === pid);
                                                     if (!p) return null;
                                                     return (
-                                                        <div key={pid} className="flex items-center gap-1.5 bg-black/20 pr-2 rounded-full border border-red-500/30">
+                                                        <div key={idx} className="flex items-center gap-1.5 bg-black/20 pr-2 rounded-full border border-red-500/30">
                                                             <div className="relative">
                                                                 <Avatar seed={p.avatar} size="sm" className="w-6 h-6 grayscale opacity-70" />
                                                                 <div className="absolute inset-0 flex items-center justify-center text-red-500 font-bold text-lg leading-none shadow-black drop-shadow-md">
@@ -252,13 +296,15 @@ export function GameView({ socket, gameState, selfId }) {
                         <div className="glass-panel p-4 flex flex-col gap-4 h-fit order-first md:order-last">
                             {status === 'READING' && (
                                 <div className="space-y-4">
-                                    <div className="text-center border-b border-white/10 pb-4">
-                                        <p className="text-sm uppercase tracking-wider opacity-60">Current Reader</p>
-                                        <div className="flex items-center justify-center gap-2 mt-2">
-                                            <Avatar seed={readerPlayer?.avatar} size="sm" />
-                                            <span className="font-bold text-xl">{readerPlayer?.name}</span>
+                                    {!isReader && (
+                                        <div className="text-center border-b border-white/10 pb-4">
+                                            <p className="text-sm uppercase tracking-wider opacity-60">Current Reader</p>
+                                            <div className="flex items-center justify-center gap-2 mt-2">
+                                                <Avatar seed={readerPlayer?.avatar} size="sm" />
+                                                <span className="font-bold text-xl">{readerPlayer?.name}</span>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                     {isReader ? (
                                         <div className="p-4 bg-pink-500/20 border border-pink-500/50 rounded-xl text-center animate-pulse-slow">
                                             <p className="text-xl font-bold text-pink-300">You are the Reader!</p>
