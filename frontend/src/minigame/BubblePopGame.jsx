@@ -25,14 +25,17 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
         const engine = new BubblePopEngine(containerRef.current, {
             selfId,
             syncSeed,
-            onPop: (playerId, bubbleId) => {
+            onPop: (playerId, bubbleId, newScore) => {
                 if (playerId === selfId) {
-                    setPopCount(prev => prev + 1);
+                    setPopCount(newScore);
                     socket?.emit('minigame_bubble_popped', { playerId, bubbleId });
                 }
             },
             onGroundedChange: (grounded) => {
                 setIsGrounded(grounded);
+            },
+            onStateSync: (state) => {
+                socket?.emit('minigame_state_sync', state);
             }
         });
 
@@ -96,9 +99,36 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
             }
         };
 
+        const handleStateSync = (state) => {
+            if (state.playerId !== selfId && engineRef.current) {
+                engineRef.current.syncPlayerState(state.playerId, state);
+            }
+        };
+
+        const handleScores = (popCounts) => {
+            if (engineRef.current) {
+                engineRef.current.syncScores(popCounts);
+            }
+            if (popCounts[selfId] !== undefined) {
+                setPopCount(prev => Math.max(prev, popCounts[selfId]));
+            }
+        };
+
+        const handleFullMinigameState = (state) => {
+            if (engineRef.current) {
+                engineRef.current.syncMinigameState(state);
+            }
+            if (state?.popCounts?.[selfId] !== undefined) {
+                setPopCount(prev => Math.max(prev, state.popCounts[selfId]));
+            }
+        };
+
         socket.on('minigame_launch', handleOtherLaunch);
         socket.on('minigame_player_joined', handlePlayerJoined);
         socket.on('minigame_bubble_popped', handleBubblePopped);
+        socket.on('minigame_state_sync', handleStateSync);
+        socket.on('minigame_state', handleFullMinigameState);
+        socket.on('minigame_scores', handleScores);
 
         // Announce that we joined the minigame
         socket.emit('minigame_join', { playerId: selfId });
@@ -107,6 +137,9 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
             socket.off('minigame_launch', handleOtherLaunch);
             socket.off('minigame_player_joined', handlePlayerJoined);
             socket.off('minigame_bubble_popped', handleBubblePopped);
+            socket.off('minigame_state_sync', handleStateSync);
+            socket.off('minigame_state', handleFullMinigameState);
+            socket.off('minigame_scores', handleScores);
         };
     }, [socket, selfId]);
 
@@ -115,8 +148,8 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
         if (!containerRef.current) return null;
 
         const rect = containerRef.current.getBoundingClientRect();
-        const scaleX = C.CANVAS_SIZE / rect.width;
-        const scaleY = C.CANVAS_SIZE / rect.height;
+        const scaleX = C.CANVAS_WIDTH / rect.width;
+        const scaleY = C.CANVAS_HEIGHT / rect.height;
 
         let clientX, clientY;
         if (e.touches) {
@@ -234,7 +267,9 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
         const powerRatio = (power - C.MIN_LAUNCH_POWER) / (C.MAX_LAUNCH_POWER - C.MIN_LAUNCH_POWER);
 
         // Line from avatar toward launch direction
-        const lineLength = Math.min(dist, 150);
+        // Cap visual length at the maximum power distance
+        const maxDist = C.MAX_LAUNCH_POWER / C.LAUNCH_DRAG_SCALE;
+        const lineLength = Math.min(dist, maxDist);
         const endX = dragStart.x + (dx / dist) * lineLength;
         const endY = dragStart.y + (dy / dist) * lineLength;
 
@@ -250,11 +285,11 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
     const aimLine = getAimLine();
 
     return (
-        <div className="relative w-full aspect-square select-none touch-none">
+        <div className="relative w-full aspect-[10/11] select-none touch-none">
             {/* Game canvas container */}
             <div
                 ref={containerRef}
-                className="w-full h-full rounded-xl overflow-hidden border-2 border-white/20"
+                className="w-full h-full overflow-hidden border-t border-white/10 rounded-b-xl"
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
             />
@@ -271,7 +306,7 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
             {engineReady && aimLine && (
                 <svg
                     className="absolute inset-0 w-full h-full pointer-events-none"
-                    viewBox={`0 0 ${C.CANVAS_SIZE} ${C.CANVAS_SIZE}`}
+                    viewBox={`0 0 ${C.CANVAS_WIDTH} ${C.CANVAS_HEIGHT}`}
                 >
                     {/* Trajectory line */}
                     <line
@@ -317,7 +352,7 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
                     ? 'bg-green-500/30 border border-green-500/50 text-green-200'
                     : 'bg-white/10 border border-white/20 text-white/50'
                     }`}>
-                    {isGrounded ? '🎯 Drag to aim!' : '🚀 Flying...'}
+                    {isGrounded ? 'Drag to aim!' : 'Flying...'}
                 </div>
             )}
         </div>

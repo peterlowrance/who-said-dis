@@ -16,6 +16,11 @@ class GameState {
         };
         this.previousRoundEliminationOrder = []; // store elimination order from the previous round
         this.usedPrompts = new Set();
+        this.minigameState = {
+            popCounts: {}, // playerId -> count
+            poppedBubbles: [], // list of slot indices
+            playerPops: {} // playerId -> { bubbleId -> true }
+        };
     }
 
     addPlayer(socketId, name, avatar) {
@@ -159,6 +164,13 @@ class GameState {
         }
 
         this.currentRound.guesserId = firstGuesserId;
+
+        // Reset minigame state for the new round
+        this.minigameState = {
+            popCounts: {},
+            poppedBubbles: [],
+            playerPops: {}
+        };
     }
 
     submitAnswer(playerId, text) {
@@ -345,6 +357,31 @@ class GameState {
             nextFallbackIndex = (nextFallbackIndex + 1) % this.players.length;
             attempts++;
         }
+    }
+
+    recordMinigamePop(playerId, bubbleId) {
+        if (!this.minigameState.playerPops[playerId]) {
+            this.minigameState.playerPops[playerId] = {};
+        }
+
+        // Only count if this SPECIFIC player hasn't already popped this bubble
+        if (!this.minigameState.playerPops[playerId][bubbleId]) {
+            this.minigameState.playerPops[playerId][bubbleId] = true;
+
+            if (!this.minigameState.popCounts[playerId]) {
+                this.minigameState.popCounts[playerId] = 0;
+            }
+            this.minigameState.popCounts[playerId]++;
+
+            // Still track which bubbles are gone for late joiners (visual)
+            // Return true if this is the FIRST time anyone popped it
+            if (!this.minigameState.poppedBubbles.includes(bubbleId)) {
+                this.minigameState.poppedBubbles.push(bubbleId);
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

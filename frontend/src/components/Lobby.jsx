@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Avatar } from './Avatar';
+import { BubblePopGame } from '../minigame/BubblePopGame';
 
 export function Lobby({ socket, players, selfId }) {
     const [name, setName] = useState('');
@@ -68,6 +69,22 @@ export function Lobby({ socket, players, selfId }) {
                 {players.length < 3 && (
                     <div className="text-white/40 italic">Need at least 3 players to start</div>
                 )}
+
+                {/* Minigame while waiting */}
+                <div className="w-full max-w-2xl mb-12">
+                    <div className="glass-panel overflow-hidden border-t border-white/10 p-0 relative">
+                        <div className="absolute top-4 left-4 z-10 bg-black/40 backdrop-blur-sm px-3 py-1 rounded-full border border-white/10">
+                            <span className="text-xs font-bold uppercase tracking-wider text-pink-300">Minigame Area</span>
+                        </div>
+                        <BubblePopGame
+                            socket={socket}
+                            selfId={selfId}
+                            syncSeed="lobby"
+                            myAvatar={myPlayer?.avatar}
+                            otherPlayers={players.filter(p => p.id !== selfId)}
+                        />
+                    </div>
+                </div>
             </div>
         );
     }

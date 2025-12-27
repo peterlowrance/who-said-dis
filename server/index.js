@@ -132,7 +132,7 @@ io.on('connection', (socket) => {
                         gameState.nextRound();
                         io.emit('state_update', gameState);
                     }
-                }, 5000);
+                }, 3500);
             }
         }
     });
@@ -161,6 +161,9 @@ io.on('connection', (socket) => {
             playerId: player.id,
             avatar: player.avatar
         });
+
+        // Send current minigame state to the joining player
+        socket.emit('minigame_state', gameState.minigameState);
     });
 
     // Player launched their avatar in the minigame
@@ -178,8 +181,34 @@ io.on('connection', (socket) => {
 
     // Player popped a bubble (for potential future scoring/tracking)
     socket.on('minigame_bubble_popped', ({ playerId, bubbleId }) => {
-        // Currently just for tracking - could add server-side pop count later
-        // No broadcast needed since bubbles are client-side per player
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+        if (!player) return;
+
+        // Record the pop on server state (lenient)
+        const isFirstPop = gameState.recordMinigamePop(player.id, bubbleId);
+
+        if (isFirstPop) {
+            // Broadcast to other players so they remove the same bubble
+            socket.broadcast.emit('minigame_bubble_popped', {
+                playerId: player.id,
+                bubbleId
+            });
+        }
+
+        // ALWAYS broadcast authoritative scores to everyone
+        io.emit('minigame_scores', gameState.minigameState.popCounts);
+    });
+
+    // Periodic state synchronization for moving avatars
+    socket.on('minigame_state_sync', ({ playerId, x, y, vx, vy }) => {
+        const player = findActivePlayerOrHeal(socket.id, playerId);
+        if (!player) return;
+
+        // Broadcast current physics state to others for reconciliation
+        socket.broadcast.emit('minigame_state_sync', {
+            playerId: player.id,
+            x, y, vx, vy
+        });
     });
 
     // ======================================

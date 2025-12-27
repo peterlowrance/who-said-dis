@@ -123,23 +123,27 @@ export function GameView({ socket, gameState, selfId }) {
                         onNext={() => setShowRecap(false)}
                     />
                 )}
-                <div className="glass-panel p-8 w-full text-center space-y-6 relative">
+                <div className={clsx(
+                    "glass-panel w-full text-center space-y-6 relative transition-all duration-300 overflow-hidden",
+                    (submitted || myAnswer) ? "p-8 pb-0 px-0 mb-12" : "p-8"
+                )}>
                     {/* Persistent User Info */}
                     <div className="absolute top-2 right-2 flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
                         <span className="text-sm font-bold opacity-80">{myPlayer?.name}</span>
                         <Avatar seed={myPlayer?.avatar} size="sm" className="w-6 h-6" />
                     </div>
 
-                    <div className="space-y-2 pt-4">
+                    <div className="space-y-2 pt-2">
                         <h3 className="text-xl font-bold text-pink-400 uppercase tracking-widest">Topic</h3>
                         <p className="text-3xl font-black leading-tight">{currentRound.prompt}</p>
                     </div>
 
                     {submitted || myAnswer ? (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-green-500/20 border border-green-500/50 rounded-xl text-center">
-                                <p className="text-lg font-bold text-green-200">Answer Submitted! 🎉</p>
-                                <p className="text-sm text-white/60">Pop some bubbles while you wait!</p>
+                        <div className="space-y-0">
+                            <div className="flex items-center justify-center gap-2 mb-2 px-8">
+                                <span className="text-green-400 text-xl">✓</span>
+                                <p className="text-sm font-bold text-green-200">Answer Submitted!</p>
+                                <span className="text-white/40 text-xs">— Pop bubbles while you wait!</span>
                             </div>
                             <BubblePopGame
                                 socket={socket}

@@ -13,6 +13,7 @@ export class BubblePopEngine {
         this.container = container;
         this.onPopCallback = options.onPop || (() => { });
         this.onGroundedChange = options.onGroundedChange || (() => { });
+        this.onStateSync = options.onStateSync || (() => { });
 
         // Game state
         this.players = new Map(); // playerId -> { body, sprite, avatar, isGrounded }
@@ -33,7 +34,10 @@ export class BubblePopEngine {
         // Synchronization state
         this.syncSeed = options.syncSeed ? hashString(options.syncSeed) : 0;
         this.poppedIndices = new Set(); // indices of bubbles popped by anyone
+        this.processedPopEvents = new Set(); // "playerId:bubbleId" to prevent double scoring
         this.lastSlotIndex = -1;
+        this.lastSyncTime = 0;
+        this.serverState = null; // Store full state for late joiners
 
         // Start initialization and store the promise
         this.ready = this.init();
@@ -44,8 +48,8 @@ export class BubblePopEngine {
             // Create PixiJS application
             this.app = new PIXI.Application();
             await this.app.init({
-                width: C.CANVAS_SIZE,
-                height: C.CANVAS_SIZE,
+                width: C.CANVAS_WIDTH,
+                height: C.CANVAS_HEIGHT,
                 backgroundColor: C.BACKGROUND_COLOR,
                 antialias: true,
                 resolution: window.devicePixelRatio || 1,
@@ -193,24 +197,114 @@ export class BubblePopEngine {
     }
 
     handleBubblePop(bubbleId, playerId, isLocal = false) {
-        const bubble = this.bubbles.get(bubbleId);
-
-        // Track as popped even if we don't have it yet (sync)
+        // Track the visual removal
         this.poppedIndices.add(bubbleId);
 
-        if (!bubble) return;
+        // Visual removal - this should only happen once per bubbleId ever
+        const bubble = this.bubbles.get(bubbleId);
+        if (bubble) {
+            // Create pop animation
+            this.createPopAnimation(bubble);
 
-        // Create pop animation
-        this.createPopAnimation(bubble);
+            // Remove bubble
+            this.world.destroyBody(bubble.body);
+            this.bubbleLayer.removeChild(bubble.sprite);
+            this.bubbles.delete(bubbleId);
+        }
 
-        // Remove bubble
-        this.world.destroyBody(bubble.body);
-        this.bubbleLayer.removeChild(bubble.sprite);
-        this.bubbles.delete(bubbleId);
-
-        // Notify callback if local
+        // Only award points immediately if this is the LOCAL player
+        // For others, we wait for the server's authoritative score sync
+        // this avoids double-counting or sync drift
         if (isLocal) {
-            this.onPopCallback(playerId, bubbleId);
+            const eventId = `${playerId}:${bubbleId}`;
+            if (!this.processedPopEvents.has(eventId)) {
+                this.processedPopEvents.add(eventId);
+                const player = this.players.get(playerId);
+                if (player) {
+                    player.popCount = (player.popCount || 0) + 1;
+                    const newScore = player.popCount;
+                    if (player.scoreText) {
+                        player.scoreText.text = newScore.toString();
+                    }
+                    // Notify local React wrapper with the authoritative new score
+                    this.onPopCallback(playerId, bubbleId, newScore);
+                }
+            }
+        }
+    }
+
+    /**
+     * Authroritative score sync from server
+     */
+    syncScores(popCounts) {
+        if (!popCounts) return;
+        Object.entries(popCounts).forEach(([pid, count]) => {
+            const player = this.players.get(pid);
+            if (player) {
+                if (pid === this.selfId) {
+                    // For SELF, only update if server has MORE (in case we lagged or missed one)
+                    // This prevents local score from flickering down
+                    if (count > (player.popCount || 0)) {
+                        player.popCount = count;
+                        if (player.scoreText) {
+                            player.scoreText.text = count.toString();
+                        }
+                    }
+                } else {
+                    // For OTHERS, the server is the absolute authority
+                    // This resolves any local discrepancies immediately
+                    player.popCount = count;
+                    if (player.scoreText) {
+                        player.scoreText.text = count.toString();
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Batch update minigame state (usually for late joiners)
+     */
+    syncMinigameState(state) {
+        if (!state) return;
+        this.serverState = state;
+
+        // Sync popped bubbles
+        if (state.poppedBubbles) {
+            state.poppedBubbles.forEach(id => {
+                this.poppedIndices.add(id);
+                // If bubble already exists, remove it
+                const bubble = this.bubbles.get(id);
+                if (bubble) {
+                    this.world.destroyBody(bubble.body);
+                    this.bubbleLayer.removeChild(bubble.sprite);
+                    this.bubbles.delete(id);
+                }
+            });
+        }
+
+        // Sync scores
+        if (state.popCounts) {
+            Object.entries(state.popCounts).forEach(([pid, count]) => {
+                const player = this.players.get(pid);
+                if (player) {
+                    player.popCount = count;
+                    if (player.scoreText) {
+                        player.scoreText.text = count.toString();
+                    }
+                }
+            });
+        }
+
+        // Sync processed events to prevent double-counting old pops
+        if (state.playerPops) {
+            Object.entries(state.playerPops).forEach(([pid, bubbleIds]) => {
+                if (bubbleIds && typeof bubbleIds === 'object') {
+                    Object.keys(bubbleIds).forEach(bid => {
+                        this.processedPopEvents.add(`${pid}:${bid}`);
+                    });
+                }
+            });
         }
     }
 
@@ -295,6 +389,10 @@ export class BubblePopEngine {
         const radius = C.BUBBLE_MIN_RADIUS + prng() * (C.BUBBLE_MAX_RADIUS - C.BUBBLE_MIN_RADIUS);
         const x = radius + prng() * (C.WORLD_WIDTH - radius * 2);
 
+        // Deterministic individual speed and gravity
+        const fallSpeed = C.BUBBLE_MIN_FALL_SPEED + prng() * (C.BUBBLE_MAX_FALL_SPEED - C.BUBBLE_MIN_FALL_SPEED);
+        const bubbleGravity = C.BUBBLE_MIN_GRAVITY + prng() * (C.BUBBLE_MAX_GRAVITY - C.BUBBLE_MIN_GRAVITY);
+
         // Deterministic color pick
         const colorIndex = Math.floor(prng() * C.BUBBLE_COLORS.length);
         const color = C.BUBBLE_COLORS[colorIndex];
@@ -304,12 +402,13 @@ export class BubblePopEngine {
         const currentTime = Date.now();
         const elapsed = (currentTime - spawnTime) / 1000; // seconds
 
-        // Initial spawn Y is just below the screen
-        const startY = C.WORLD_HEIGHT + radius;
-        const currentY = startY - (elapsed * C.BUBBLE_FLOAT_SPEED);
+        // Initial spawn Y is just above the top of the screen
+        const startY = -radius;
+        // y = y0 + v0*t + 0.5*g*t^2
+        const currentY = startY + (fallSpeed * elapsed) + (0.5 * bubbleGravity * elapsed * elapsed);
 
-        // If the bubble is already off-screen at the top, don't spawn
-        if (currentY < -radius) return;
+        // If the bubble is already off-screen at the bottom, don't spawn
+        if (currentY > C.WORLD_HEIGHT + radius) return;
 
         // Create physics body
         const body = this.world.createBody({
@@ -325,7 +424,15 @@ export class BubblePopEngine {
         sprite.y = toPixels(currentY, C.PHYSICS_SCALE);
 
         this.bubbleLayer.addChild(sprite);
-        this.bubbles.set(slotIndex, { body, sprite, radius, color });
+        this.bubbles.set(slotIndex, {
+            body,
+            sprite,
+            radius,
+            color,
+            fallSpeed,
+            bubbleGravity,
+            spawnTime
+        });
     }
 
     createBubbleSprite(radius, color) {
@@ -358,10 +465,11 @@ export class BubblePopEngine {
         }
         if (this.players.has(playerId)) return;
 
-        // Position at bottom, spread out horizontally
-        const existingCount = this.players.size;
-        const xSpread = C.WORLD_WIDTH / (Math.max(existingCount + 2, 4));
-        const x = xSpread * (existingCount + 1);
+        // Deterministic initial position based on playerId hash
+        // This ensures all clients spawn the player at the same location regardless of join order
+        const hash = hashString(playerId);
+        const normalizedHash = (Math.abs(hash) % 1000) / 1000;
+        const x = C.AVATAR_RADIUS + normalizedHash * (C.WORLD_WIDTH - C.AVATAR_RADIUS * 2);
         const y = C.WORLD_HEIGHT - C.AVATAR_RADIUS - 0.1;
 
         // Create physics body
@@ -406,8 +514,8 @@ export class BubblePopEngine {
         const img = new Image();
         const avatarSprite = new PIXI.Sprite();
         avatarSprite.anchor.set(0.5);
-        avatarSprite.width = C.AVATAR_PIXEL_RADIUS * 1.5;
-        avatarSprite.height = C.AVATAR_PIXEL_RADIUS * 1.5;
+        avatarSprite.width = C.AVATAR_PIXEL_RADIUS * 1.9;
+        avatarSprite.height = C.AVATAR_PIXEL_RADIUS * 1.9;
         sprite.addChild(avatarSprite);
 
         img.onload = () => {
@@ -428,11 +536,35 @@ export class BubblePopEngine {
         sprite.avatarSeed = avatarSeed;
         sprite.isOwn = isOwn;
 
+        // Add score text overlay
+        const initialCount = this.serverState?.popCounts?.[playerId] || 0;
+        const scoreText = new PIXI.Text({
+            text: initialCount.toString(),
+            style: {
+                fontFamily: 'Arial Black, sans-serif',
+                fontSize: 16,
+                fill: 0xffffff,
+                align: 'center',
+                stroke: { color: 0x000000, width: 4, join: 'round' }
+            }
+        });
+        scoreText.anchor.set(0.5);
+        scoreText.x = C.AVATAR_PIXEL_RADIUS * 0.7;
+        scoreText.y = -C.AVATAR_PIXEL_RADIUS * 0.7;
+        sprite.addChild(scoreText);
+
         sprite.x = toPixels(x, C.PHYSICS_SCALE);
         sprite.y = toPixels(y, C.PHYSICS_SCALE);
 
         this.avatarLayer.addChild(sprite);
-        this.players.set(playerId, { body, sprite, avatar: avatarSeed, isGrounded: true });
+        this.players.set(playerId, {
+            body,
+            sprite,
+            avatar: avatarSeed,
+            isGrounded: true,
+            popCount: initialCount,
+            scoreText
+        });
 
         // If this is our own player, check initial grounded state
         if (isOwn) {
@@ -493,6 +625,44 @@ export class BubblePopEngine {
         return true;
     }
 
+    /**
+     * Reconcile remote player state with soft interpolation
+     */
+    syncPlayerState(playerId, state) {
+        if (playerId === this.selfId) return;
+
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        const { x, y, vx, vy } = state;
+        const currentPos = player.body.getPosition();
+
+        // Distance check for hard snap vs soft interpolation
+        const dist = Math.sqrt(Math.pow(x - currentPos.x, 2) + Math.pow(y - currentPos.y, 2));
+
+        if (dist > 2.0) {
+            // Hard snap if too far off
+            player.body.setPosition(planck.Vec2(x, y));
+            player.body.setLinearVelocity(planck.Vec2(vx, vy));
+        } else if (dist > 0.05) {
+            // Soft interpolation for minor drift
+            // Gently move towards the target position
+            const targetPos = planck.Vec2(
+                currentPos.x + (x - currentPos.x) * 0.3,
+                currentPos.y + (y - currentPos.y) * 0.3
+            );
+            player.body.setPosition(targetPos);
+
+            // Also blend velocities
+            const currentVel = player.body.getLinearVelocity();
+            const targetVel = planck.Vec2(
+                currentVel.x + (vx - currentVel.x) * 0.2,
+                currentVel.y + (vy - currentVel.y) * 0.2
+            );
+            player.body.setLinearVelocity(targetVel);
+        }
+    }
+
     update() {
         if (!this.isReady || !this.world || this.isDestroyed) return;
 
@@ -507,22 +677,42 @@ export class BubblePopEngine {
         const dt = Math.min((now - this.lastTime) / 1000, 1 / 30); // Cap at 30fps minimum
         this.lastTime = now;
 
+        // Periodic state sync for our own player
+        if (this.selfId && now - this.lastSyncTime > C.STATE_SYNC_INTERVAL) {
+            const self = this.players.get(this.selfId);
+            if (self && !self.isGrounded) {
+                const pos = self.body.getPosition();
+                const v = self.body.getLinearVelocity();
+                this.onStateSync({
+                    playerId: this.selfId,
+                    x: pos.x,
+                    y: pos.y,
+                    vx: v.x,
+                    vy: v.y
+                });
+                this.lastSyncTime = now;
+            }
+        }
+
         // Step physics
         this.world.step(dt, 8, 3);
 
-        // Update bubble positions (gentle float)
+        // Update bubble positions (downward fall with gravity)
         this.bubbles.forEach((bubble, slotIndex) => {
             const pos = bubble.body.getPosition();
+            const elapsed = (Date.now() - bubble.spawnTime) / 1000;
 
             // Deterministic wobble
             const prng = createPRNG(this.syncSeed + slotIndex);
             const wobbleSeed = prng() * 100;
             const wobble = Math.sin(now / 1000 + wobbleSeed) * 0.01;
 
-            bubble.body.setLinearVelocity(planck.Vec2(wobble, -C.BUBBLE_FLOAT_SPEED));
+            // v = v0 + g * t
+            const currentVelocityY = bubble.fallSpeed + (bubble.bubbleGravity * elapsed);
+            bubble.body.setLinearVelocity(planck.Vec2(wobble, currentVelocityY));
 
-            // Remove if way off screen
-            if (pos.y < -bubble.radius - 2) {
+            // Remove if way off screen (bottom)
+            if (pos.y > C.WORLD_HEIGHT + bubble.radius + 1) {
                 this.world.destroyBody(bubble.body);
                 this.bubbleLayer.removeChild(bubble.sprite);
                 this.bubbles.delete(slotIndex);

@@ -1,15 +1,16 @@
 // Minigame Physics & Rendering Constants
 
-// Canvas dimensions (square viewport for mobile)
-export const CANVAS_SIZE = 400; // Will scale responsively
+// Canvas dimensions (10:11 ratio for very subtle vertical lean)
+export const CANVAS_WIDTH = 400;
+export const CANVAS_HEIGHT = 440;
 
 // Physics world settings (planck uses meters, we use pixels and scale)
 export const PHYSICS_SCALE = 30; // pixels per meter
 export const GRAVITY = 15; // m/s² - moderate gravity for playful feel
 
 // World boundaries (in physics units)
-export const WORLD_WIDTH = CANVAS_SIZE / PHYSICS_SCALE;
-export const WORLD_HEIGHT = CANVAS_SIZE / PHYSICS_SCALE;
+export const WORLD_WIDTH = CANVAS_WIDTH / PHYSICS_SCALE;
+export const WORLD_HEIGHT = CANVAS_HEIGHT / PHYSICS_SCALE;
 
 // Avatar settings
 export const AVATAR_RADIUS = 0.6; // meters (physics)
@@ -26,16 +27,19 @@ export const GROUNDED_Y_THRESHOLD = WORLD_HEIGHT - AVATAR_RADIUS - 0.5; // Incre
 // Launch settings
 export const MIN_LAUNCH_POWER = 5; // minimum velocity magnitude
 export const MAX_LAUNCH_POWER = 25; // maximum velocity magnitude
-export const LAUNCH_DRAG_SCALE = 0.15; // pixels dragged → power multiplier
+export const LAUNCH_DRAG_SCALE = 0.4; // increased from 0.15 for better mobile sensitivity
 
 // Bubble settings
 export const BUBBLE_MIN_RADIUS = 0.4; // meters
 export const BUBBLE_MAX_RADIUS = 0.8;
 export const BUBBLE_SPAWN_INTERVAL = 2000; // ms
 export const MAX_BUBBLES = 15;
-export const BUBBLE_FLOAT_SPEED = 0.3; // gentle upward drift
+export const BUBBLE_MIN_FALL_SPEED = 0.2; // starting downward velocity
+export const BUBBLE_MAX_FALL_SPEED = 0.8;
+export const BUBBLE_MIN_GRAVITY = 0.05; // gentle acceleration
+export const BUBBLE_MAX_GRAVITY = 0.2;
 
-// Bubble Y spawn range (above ground, below ceiling)
+// Bubble Y spawn range (no longer used for spawn location, but maybe for reference)
 export const BUBBLE_SPAWN_Y_MIN = WORLD_HEIGHT * 0.2;
 export const BUBBLE_SPAWN_Y_MAX = WORLD_HEIGHT * 0.7;
 
@@ -58,3 +62,7 @@ export const BACKGROUND_COLOR = 0x1a0a2e; // Dark purple, matches game theme
 // Animation timings
 export const POP_ANIMATION_DURATION = 300; // ms
 export const AVATAR_TRAIL_DURATION = 150; // ms
+
+// Sync settings
+export const STATE_SYNC_INTERVAL = 500; // ms - frequency of position/velocity sync
+
