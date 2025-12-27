@@ -352,7 +352,7 @@ export function BubblePopGame({ socket, selfId, syncSeed, myAvatar, otherPlayers
                     ? 'bg-green-500/30 border border-green-500/50 text-green-200'
                     : 'bg-white/10 border border-white/20 text-white/50'
                     }`}>
-                    {isGrounded ? 'Drag to aim!' : 'Flying...'}
+                    {isGrounded ? 'Pull down to launch!' : 'Flying...'}
                 </div>
             )}
         </div>

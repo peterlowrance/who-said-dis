@@ -493,17 +493,30 @@ export class BubblePopEngine {
         // Create avatar sprite container
         const sprite = new PIXI.Container();
 
+        // Official library color palette + extras
+        const AVATAR_COLORS = [
+            '#d7b89c', '#b18272', '#ec8a90', '#a1Ac88', '#99c9bd', '#50c8c6',
+            '#f472b6', '#c084fc', '#60a5fa', '#4ade80', '#fbbf24', '#f87171'
+        ];
+
         // Background circle
         const bg = new PIXI.Graphics();
         bg.circle(0, 0, C.AVATAR_PIXEL_RADIUS);
-        bg.fill({ color: isOwn ? 0x22d3ee : 0x8b5cf6, alpha: 0.3 });
-        bg.stroke({ color: isOwn ? 0x22d3ee : 0xa855f7, width: 3, alpha: 0.8 });
+
+        // Highlight own player with cyan, others use original purple theme for clear identification
+        const bgColor = isOwn ? 0x22d3ee : 0x8b5cf6;
+        const borderColor = isOwn ? 0x22d3ee : 0xffffff;
+        const borderAlpha = isOwn ? 0.8 : 0.2; // Match border-white/20
+
+        bg.fill({ color: bgColor, alpha: 0.3 });
+        bg.stroke({ color: borderColor, width: 3, alpha: borderAlpha });
         sprite.addChild(bg);
 
         // Create avatar image using animal-avatar-generator
         const avatarSvg = avatar(avatarSeed || 'random', {
             size: 150, // Slightly higher res for better quality
-            blackout: true
+            blackout: true,
+            avatarColors: AVATAR_COLORS
         });
 
         // Use Blob and URL for more reliable loading in PixiJS v8

@@ -13,7 +13,7 @@ export const WORLD_WIDTH = CANVAS_WIDTH / PHYSICS_SCALE;
 export const WORLD_HEIGHT = CANVAS_HEIGHT / PHYSICS_SCALE;
 
 // Avatar settings
-export const AVATAR_RADIUS = 0.6; // meters (physics)
+export const AVATAR_RADIUS = 0.72; // meters (physics) - increased by 20%
 export const AVATAR_PIXEL_RADIUS = AVATAR_RADIUS * PHYSICS_SCALE;
 export const AVATAR_RESTITUTION = 0.7; // bounciness
 export const AVATAR_FRICTION = 0.3;
@@ -26,7 +26,7 @@ export const GROUNDED_Y_THRESHOLD = WORLD_HEIGHT - AVATAR_RADIUS - 0.5; // Incre
 
 // Launch settings
 export const MIN_LAUNCH_POWER = 5; // minimum velocity magnitude
-export const MAX_LAUNCH_POWER = 25; // maximum velocity magnitude
+export const MAX_LAUNCH_POWER = 28; // maximum velocity magnitude
 export const LAUNCH_DRAG_SCALE = 0.4; // increased from 0.15 for better mobile sensitivity
 
 // Bubble settings

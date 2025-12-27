@@ -80,11 +80,11 @@ export function RecapView({ previousRound, players, onNext, selfId }) {
                                             <div className="flex flex-wrap gap-2 pt-1">
                                                 {wrongGuesses.map((wg, i) => (
                                                     <div key={i} className="flex items-center gap-1 text-red-300/60 bg-red-500/10 px-2 py-0.5 rounded-full text-xs">
-                                                        <span className="line-through decoration-red-500/50">
+                                                        <span className="decoration-red-500/50">
                                                             {players.find(p => p.id === wg.guesserId)?.name}
                                                         </span>
                                                         <span className="opacity-50 text-[10px]">
-                                                            (guessed {players.find(p => p.id === wg.targetId)?.name})
+                                                            guessed it was {players.find(p => p.id === wg.targetId)?.name}
                                                         </span>
                                                     </div>
                                                 ))}

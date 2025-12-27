@@ -233,7 +233,7 @@ export function GameView({ socket, gameState, selfId }) {
                                         onClick={handleReveal}
                                         className="w-full p-6 rounded-xl border-2 border-dashed border-cyan-500/50 bg-cyan-500/10 hover:bg-cyan-500/20 hover:border-cyan-400 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] active:scale-[0.98] active:bg-cyan-500/30 transition-all duration-200 flex items-center justify-center gap-4 group animate-pulse-slow ring-1 ring-cyan-500/30"
                                     >
-                                        <p className="font-black text-cyan-300">Reveal Next Answer</p>
+                                        <p className="font-black text-cyan-300">Tap to Reveal Next Answer</p>
                                     </button>
                                 )
                             )}
@@ -310,9 +310,9 @@ export function GameView({ socket, gameState, selfId }) {
                                         </div>
                                     )}
                                     {isReader ? (
-                                        <div className="p-4 bg-pink-500/20 border border-pink-500/50 rounded-xl text-center animate-pulse-slow">
-                                            <p className="text-xl font-bold text-pink-300">You are the Reader!</p>
-                                            <p className="text-sm text-white/60">Reveal the answers and read them aloud</p>
+                                        <div className="text-center space-y-1 py-2">
+                                            <p className="text-xl font-bold text-pink-400 animate-pulse-slow">You are the Reader!</p>
+                                            <p className="text-sm text-white/60 italic">Reveal the answers and read them aloud</p>
                                         </div>
                                     ) : (
                                         <div className="text-center opacity-60">
@@ -339,7 +339,7 @@ export function GameView({ socket, gameState, selfId }) {
                                         </div>
                                     ) : isGuesser && (
                                         <div className="text-center animate-pulse-slow">
-                                            <p className="font-bold text-pink-300">It's your turn! Select an answer.</p>
+                                            <p className="font-bold text-pink-300">It's your turn to guess! Select an answer.</p>
                                         </div>
                                     )}
 

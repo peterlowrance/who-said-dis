@@ -12,11 +12,17 @@ export function Avatar({ seed, size = 'md', className, onClick }) {
 
     const pixelSize = sizeMap[size] || sizeMap.md;
 
+    const AVATAR_COLORS = [
+        '#d7b89c', '#b18272', '#ec8a90', '#a1Ac88', '#99c9bd', '#50c8c6', // Docs colors
+        '#f472b6', '#c084fc', '#60a5fa', '#4ade80', '#fbbf24', '#f87171'  // Extras
+    ];
+
     const svgString = useMemo(() => {
         const svg = avatar(seed || 'random', {
             size: pixelSize,
             round: false,
-            blackout: true
+            blackout: true,
+            avatarColors: AVATAR_COLORS
         });
         // Add negative margin to the SVG element
         return svg.replace('<svg', '<svg style="margin-left: -2px"');
