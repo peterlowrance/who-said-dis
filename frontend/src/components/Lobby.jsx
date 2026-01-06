@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Avatar } from './Avatar';
 import { BubblePopGame } from '../minigame/BubblePopGame';
 
-export function Lobby({ socket, players, selfId }) {
+export function Lobby({ socket, players, selfId, roomCode }) {
     const [name, setName] = useState('');
     const [avatarSeed, setAvatarSeed] = useState('');
     const [joined, setJoined] = useState(false);
@@ -37,10 +37,15 @@ export function Lobby({ socket, players, selfId }) {
     if (joined || myPlayer) { // Check if joined locally OR if we exist in players list (rejoined)
         return (
             <div className="flex flex-col items-center gap-8 max-w-2xl mx-auto w-full animate-fade-in">
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-4">
                     <h2 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-400 to-purple-400">
                         Waiting for players...
                     </h2>
+                    
+                    <div className="text-xl font-mono bg-white/10 px-4 py-2 rounded-lg inline-block border border-white/20 backdrop-blur-sm">
+                         Room Code: <span className="font-bold text-yellow-400 tracking-widest select-all">{roomCode}</span>
+                    </div>
+
                     <p className="text-white/60">The host will start the game soon.</p>
                 </div>
 

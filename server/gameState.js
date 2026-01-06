@@ -227,14 +227,17 @@ class GameState {
         if (this.status !== 'GUESSING') return { success: false, message: 'Not guessing phase' };
         if (guesserId !== this.currentRound.guesserId) return { success: false, message: 'Not your turn' };
 
-        // Find the answer by text (since we might not know the ID on client side easily, or we can pass ID if we want)
-        // Actually, client should probably send the answer object or ID if we expose it.
-        // But answers are anonymous. We should probably index them or send text.
-        // Let's assume we send the answer text or a temporary ID for the answer.
-        // For simplicity, let's match by text (assuming unique answers, or handle duplicates).
+        // Normalize text for comparison
+        const normalize = t => t.trim().toLowerCase();
+        const targetText = normalize(answerText);
 
-        const answer = this.currentRound.answers.find(a => a.text === answerText && !a.isGuessed);
-        if (!answer) return { success: false, message: 'Answer not found or already guessed' };
+        // Find ALL unguessed answers that match the text
+        const candidates = this.currentRound.answers.filter(a => !a.isGuessed && normalize(a.text) === targetText);
+        
+        if (candidates.length === 0) return { success: false, message: 'Answer not found or already guessed' };
+
+        // Check if the target player is the author of ANY of these candidates
+        const correctAnswer = candidates.find(a => a.playerId === targetPlayerId);
 
         const guessData = {
             guesserId,
@@ -244,9 +247,10 @@ class GameState {
             timestamp: Date.now()
         };
 
-        if (answer.playerId === targetPlayerId) {
-            // Correct guess
-            answer.isGuessed = true;
+        if (correctAnswer) {
+            // CORRECT GUESS
+            // Mark the specific answer instance belonging to the target player
+            correctAnswer.isGuessed = true;
             guessData.correct = true;
             this.currentRound.guesses.push(guessData);
             this.currentRound.guessedPlayers.push(targetPlayerId);
@@ -264,26 +268,29 @@ class GameState {
             // Round over if all answers guessed OR the only remaining answer belongs to the guesser
             if (unguessedAnswers.length === 0 || answersNotBelongingToGuesser.length === 0) {
                 // Award +1 point to the last remaining player (if any) whose answer wasn't guessed
-                // This usually happens if answersNotBelongingToGuesser.length === 0 but unguessedAnswers.length > 0
-                // The remaining answer belongs to the current guesser (who survived till the end)
                 if (unguessedAnswers.length === 1) {
                     const survivorId = unguessedAnswers[0].playerId;
                     const survivor = this.players.find(p => p.id === survivorId);
                     if (survivor) {
                         survivor.score += 1;
                     }
-                    // Add the survivor to the elimination order as the last eliminated (survived the longest)
                     this.currentRound.eliminationOrder.push(survivorId);
                 }
 
                 this.status = 'ROUND_OVER';
             }
 
-            // Guesser goes again if correct
             return { success: true, correct: true, message: 'Correct!' };
         } else {
-            // Incorrect guess
-            answer.wrongGuesses.push(targetPlayerId);
+            // INCORRECT GUESS
+            // Mark this player as "wrong" on ALL identical answers
+            // This is fair: if they didn't write "Pizza", they didn't write ANY of the "Pizza" cards.
+            candidates.forEach(ans => {
+                if (!ans.wrongGuesses.includes(targetPlayerId)) {
+                    ans.wrongGuesses.push(targetPlayerId);
+                }
+            });
+            
             this.currentRound.guesses.push(guessData);
 
             // Turn passes to next non-eliminated player

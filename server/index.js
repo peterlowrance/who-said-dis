@@ -3,7 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
-const GameState = require('./gameState');
+const RoomManager = require('./roomManager');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,7 +15,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3000;
-const gameState = new GameState();
+const roomManager = new RoomManager();
 
 // Serve static files from frontend build
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
@@ -28,7 +28,6 @@ app.get('/api/ip', (req, res) => {
 
     for (const name of Object.keys(nets)) {
         for (const net of nets[name]) {
-            // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
             if (net.family === 'IPv4' && !net.internal) {
                 if (!results[name]) {
                     results[name] = [];
@@ -43,38 +42,16 @@ app.get('/api/ip', (req, res) => {
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
-    // Send current state to new user
-    socket.emit('state_update', gameState);
+    // --- Helper Functions ---
 
-    socket.on('join_game', ({ name, avatar }) => {
-        const player = gameState.addPlayer(socket.id, name, avatar);
-        io.emit('state_update', gameState);
-        socket.emit('join_success', player); // Send back full player object with ID
-    });
+    const getRoomContext = () => {
+        const roomCode = socket.data.roomCode;
+        if (!roomCode) return null;
+        const gameState = roomManager.getRoom(roomCode);
+        return gameState ? { roomCode, gameState } : null;
+    };
 
-    socket.on('rejoin_game', ({ playerId }) => {
-        const player = gameState.rejoinPlayer(socket.id, playerId);
-        if (player) {
-            socket.emit('join_success', player);
-            io.emit('state_update', gameState);
-        } else {
-            socket.emit('rejoin_failed');
-        }
-    });
-
-    socket.on('leave_game', () => {
-        gameState.removePlayer(socket.id);
-        io.emit('state_update', gameState);
-    });
-
-    socket.on('start_game', () => {
-        if (gameState.startGame()) {
-            io.emit('state_update', gameState);
-        }
-    });
-
-    // Helper to find player by socket ID OR by playerId (and heal connection)
-    const findActivePlayerOrHeal = (socketId, providedPlayerId) => {
+    const findActivePlayerOrHeal = (gameState, socketId, providedPlayerId) => {
         // 1. Try to find by socket ID (standard)
         let player = gameState.players.find(p => p.socketId === socketId);
         if (player) return player;
@@ -86,51 +63,145 @@ io.on('connection', (socket) => {
                 console.log(`Connection Healing: Player ${player.name} (${player.id}) rejoined implicitly from new socket ${socketId}`);
                 player.socketId = socketId;
                 player.connected = true;
-                player.disconnectedAt = null; // Clear disconnection time
+                player.disconnectedAt = null; 
                 return player;
             }
         }
         return null;
     };
 
+    // --- Room Management Events ---
+
+    socket.on('create_room', () => {
+        const { code, gameState } = roomManager.createRoom();
+        socket.join(code);
+        socket.data.roomCode = code;
+        socket.emit('room_joined', { code, state: gameState });
+        console.log(`Room created: ${code}`);
+    });
+
+    socket.on('join_room', ({ code }) => {
+        if (!code) return socket.emit('error', { message: 'No room code provided' });
+        
+        const gameState = roomManager.getRoom(code);
+        if (gameState) {
+            socket.join(gameState.roomCode || code.toUpperCase()); // Ensure consistent casing
+            socket.data.roomCode = code.toUpperCase();
+            socket.emit('room_joined', { code: code.toUpperCase(), state: gameState });
+            console.log(`User joined room: ${code}`);
+        } else {
+            socket.emit('room_error', { message: 'Room not found' });
+        }
+    });
+
+    // --- Game Events ---
+
+    socket.on('join_game', ({ name, avatar }) => {
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = gameState.addPlayer(socket.id, name, avatar);
+        io.to(roomCode).emit('state_update', gameState);
+        socket.emit('join_success', player); 
+    });
+
+    socket.on('rejoin_game', ({ playerId, roomCode: providedRoomCode }) => {
+        // If we are reconnecting, we might not be in the room yet.
+        // Use provided roomCode to restore context.
+        if (!socket.data.roomCode && providedRoomCode) {
+            const gameState = roomManager.getRoom(providedRoomCode);
+            if (gameState) {
+                socket.join(gameState.roomCode || providedRoomCode.toUpperCase());
+                socket.data.roomCode = providedRoomCode.toUpperCase();
+            }
+        }
+
+        const ctx = getRoomContext();
+        if (!ctx) {
+            // If still no context, we can't rejoin
+            socket.emit('rejoin_failed');
+            return;
+        }
+        const { roomCode, gameState } = ctx;
+
+        const player = gameState.rejoinPlayer(socket.id, playerId);
+        if (player) {
+            socket.emit('join_success', player);
+            io.to(roomCode).emit('state_update', gameState);
+        } else {
+            socket.emit('rejoin_failed');
+        }
+    });
+
+    socket.on('leave_game', () => {
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        gameState.removePlayer(socket.id);
+        io.to(roomCode).emit('state_update', gameState);
+        // We don't necessarily leave the socket room, just the game state
+    });
+
+    socket.on('start_game', () => {
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        if (gameState.startGame()) {
+            io.to(roomCode).emit('state_update', gameState);
+        }
+    });
+
     socket.on('reveal_answer', ({ playerId } = {}) => {
-        // Only reader can reveal
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
         if (gameState.currentRound.readerId !== player.id) return;
 
         if (gameState.revealNextAnswer()) {
-            io.emit('state_update', gameState);
+            io.to(roomCode).emit('state_update', gameState);
         }
     });
 
     socket.on('submit_answer', ({ text, playerId }) => {
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
 
         if (player && gameState.submitAnswer(player.id, text)) {
-            io.emit('state_update', gameState);
+            io.to(roomCode).emit('state_update', gameState);
         }
     });
 
     socket.on('make_guess', ({ targetPlayerId, answerText, playerId }) => {
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
         const result = gameState.makeGuess(player.id, targetPlayerId, answerText);
 
-        // Emit result to everyone for toast/feedback
-        io.emit('guess_result', result);
+        io.to(roomCode).emit('guess_result', result);
 
         if (result.success) {
-            io.emit('state_update', gameState);
+            io.to(roomCode).emit('state_update', gameState);
 
             if (gameState.status === 'ROUND_OVER') {
                 setTimeout(() => {
-                    // Double check status hasn't been advanced by a manual trigger
+                    // Re-fetch state to be safe, though closure captures current
                     if (gameState.status === 'ROUND_OVER') {
                         gameState.nextRound();
-                        io.emit('state_update', gameState);
+                        io.to(roomCode).emit('state_update', gameState);
                     }
                 }, 3500);
             }
@@ -138,89 +209,108 @@ io.on('connection', (socket) => {
     });
 
     socket.on('next_round', ({ playerId } = {}) => {
-        // Verify player is in the game (optional, but good for healing)
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
-        // Only allow if we aren't already in the writing phase
         if (gameState.status !== 'WRITING') {
             gameState.nextRound();
-            io.emit('state_update', gameState);
+            io.to(roomCode).emit('state_update', gameState);
         }
     });
 
     // ========== Minigame Events ==========
 
-    // Player joined the waiting minigame
     socket.on('minigame_join', ({ playerId }) => {
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
-        // Broadcast to other players that this player joined the minigame
-        socket.broadcast.emit('minigame_player_joined', {
+        socket.to(roomCode).emit('minigame_player_joined', {
             playerId: player.id,
             avatar: player.avatar
         });
 
-        // Send current minigame state to the joining player
         socket.emit('minigame_state', gameState.minigameState);
     });
 
-    // Player launched their avatar in the minigame
     socket.on('minigame_launch', ({ playerId, angle, power }) => {
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
-        // Broadcast to other players so they can simulate the launch
-        socket.broadcast.emit('minigame_launch', {
+        socket.to(roomCode).emit('minigame_launch', {
             playerId: player.id,
             angle,
             power
         });
     });
 
-    // Player popped a bubble (for potential future scoring/tracking)
     socket.on('minigame_bubble_popped', ({ playerId, bubbleId }) => {
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
-        // Record the pop on server state (lenient)
         const isFirstPop = gameState.recordMinigamePop(player.id, bubbleId);
 
         if (isFirstPop) {
-            // Broadcast to other players so they remove the same bubble
-            socket.broadcast.emit('minigame_bubble_popped', {
+            socket.to(roomCode).emit('minigame_bubble_popped', {
                 playerId: player.id,
                 bubbleId
             });
         }
 
-        // ALWAYS broadcast authoritative scores to everyone
-        io.emit('minigame_scores', gameState.minigameState.popCounts);
+        io.to(roomCode).emit('minigame_scores', gameState.minigameState.popCounts);
     });
 
-    // Periodic state synchronization for moving avatars
     socket.on('minigame_state_sync', ({ playerId, x, y, vx, vy }) => {
-        const player = findActivePlayerOrHeal(socket.id, playerId);
+        const ctx = getRoomContext();
+        if (!ctx) return;
+        const { roomCode, gameState } = ctx;
+
+        const player = findActivePlayerOrHeal(gameState, socket.id, playerId);
         if (!player) return;
 
-        // Broadcast current physics state to others for reconciliation
-        socket.broadcast.emit('minigame_state_sync', {
+        socket.to(roomCode).emit('minigame_state_sync', {
             playerId: player.id,
             x, y, vx, vy
         });
     });
 
-    // ======================================
-
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-        gameState.disconnectPlayer(socket.id);
-        io.emit('state_update', gameState);
+        // Find which room this socket belonged to
+        const roomCode = socket.data.roomCode;
+        if (roomCode) {
+            const gameState = roomManager.getRoom(roomCode);
+            if (gameState) {
+                console.log(`User disconnected from room ${roomCode}:`, socket.id);
+                gameState.disconnectPlayer(socket.id);
+                io.to(roomCode).emit('state_update', gameState);
+                
+                // Optional: Clean up empty rooms after a timeout
+                const connectedPlayers = gameState.players.filter(p => p.connected);
+                if (connectedPlayers.length === 0) {
+                     // Could implement a timeout here to delete the room if empty for X minutes
+                }
+            }
+        } else {
+             console.log('User disconnected (no room):', socket.id);
+        }
     });
 });
 
-// Handle React routing, return all requests to React app
 // Handle React routing, return all requests to React app
 app.get(/^(?!\/api).+/, (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
