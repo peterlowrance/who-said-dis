@@ -299,10 +299,10 @@ io.on('connection', (socket) => {
                 gameState.disconnectPlayer(socket.id);
                 io.to(roomCode).emit('state_update', gameState);
                 
-                // Optional: Clean up empty rooms after a timeout
-                const connectedPlayers = gameState.players.filter(p => p.connected);
-                if (connectedPlayers.length === 0) {
-                     // Could implement a timeout here to delete the room if empty for X minutes
+                // Check if room is empty to schedule garbage collection
+                const activeCount = gameState.players.filter(p => p.connected).length;
+                if (activeCount === 0) {
+                     roomManager.scheduleCleanup(roomCode);
                 }
             }
         } else {
