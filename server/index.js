@@ -3,9 +3,16 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
 const RoomManager = require('./roomManager');
 
 const app = express();
+// Security headers (disable CSP for easier React/Vite integration)
+app.use(helmet({ contentSecurityPolicy: false }));
+// Compress all responses
+app.use(compression());
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
