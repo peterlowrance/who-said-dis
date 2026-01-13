@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://who-said-dis-b8cth.ondigitalocean.app/sitemap.xml
