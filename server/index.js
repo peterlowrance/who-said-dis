@@ -161,6 +161,8 @@ io.on('connection', (socket) => {
         const { roomCode, gameState } = ctx;
 
         if (gameState.startGame()) {
+            const activePlayers = gameState.players.filter(p => p.connected).length;
+            console.log(`Game started in room ${roomCode} with ${activePlayers} players`);
             io.to(roomCode).emit('state_update', gameState);
         }
     });

@@ -44,7 +44,7 @@ class RoomManager {
     removeRoom(code) {
         this.cancelCleanup(code);
         this.rooms.delete(code);
-        console.log(`Room ${code} deleted.`);
+        console.log(`Room ${code} deleted. (Total Rooms: ${this.rooms.size})`);
     }
 
     scheduleCleanup(code) {
