@@ -25,7 +25,7 @@ function App() {
     } else {
       document.title = roomCode ? `Game ${roomCode} - Who Said Dis?` : "Who Said Dis? - The Hilarious Party Game";
       document.querySelector('meta[name="description"]')?.setAttribute('content', 
-        "Play 'Who Said Dis?' online! Write funny anonymous answers to prompts and guess who wrote what."
+        "Play 'Who Said Dis!' Write funny anonymous answers to prompts and guess who wrote what."
       );
     }
   }, [showAbout, roomCode]);
