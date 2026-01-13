@@ -88,7 +88,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join_room', ({ code }) => {
-        if (!code) return socket.emit('error', { message: 'No room code provided' });
+        if (!code || typeof code !== 'string' || code.length > 10) {
+            return socket.emit('room_error', { message: 'Invalid room code' });
+        }
         
         const gameState = roomManager.getRoom(code);
         if (gameState) {
@@ -104,6 +106,8 @@ io.on('connection', (socket) => {
     // --- Game Events ---
 
     socket.on('join_game', ({ name, avatar }) => {
+        if (!name || typeof name !== 'string' || name.length > 200) return;
+
         const ctx = getRoomContext();
         if (!ctx) return;
         const { roomCode, gameState } = ctx;
@@ -177,6 +181,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('submit_answer', ({ text, playerId }) => {
+        if (typeof text !== 'string' || text.length > 2000) return;
+
         const ctx = getRoomContext();
         if (!ctx) return;
         const { roomCode, gameState } = ctx;
