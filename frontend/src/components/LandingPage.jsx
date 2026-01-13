@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export function LandingPage({ socket, onJoin }) {
+export function LandingPage({ socket, onJoin, onShowAbout }) {
     const [roomCode, setRoomCode] = useState('');
     const [error, setError] = useState('');
     const [isJoining, setIsJoining] = useState(false);
@@ -72,6 +72,13 @@ export function LandingPage({ socket, onJoin }) {
                             Join Game
                         </button>
                     </div>
+
+                    <button
+                        onClick={onShowAbout}
+                        className="w-full py-3 mt-4 text-white/50 hover:text-white hover:bg-white/5 rounded-lg text-sm font-semibold transition-all"
+                    >
+                        How to Play / About
+                    </button>
                 </div>
             </div>
 

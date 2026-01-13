@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { Lobby } from './components/Lobby';
 import { GameView } from './components/GameView';
 import { LandingPage } from './components/LandingPage';
+import { AboutPage } from './components/AboutPage';
 
 // Initialize socket outside component to prevent reconnects
 const socket = io();
@@ -12,6 +13,7 @@ function App() {
   const [selfId, setSelfId] = useState(null);
   const [connected, setConnected] = useState(false);
   const [roomCode, setRoomCode] = useState(null);
+  const [showAbout, setShowAbout] = useState(window.location.pathname === '/about');
 
   useEffect(() => {
     const onConnect = () => {
@@ -101,9 +103,18 @@ function App() {
     );
   }
 
-  // If we are connected but haven't joined a room yet, show Landing
+  // If we are connected but haven't joined a room yet, show Landing or About
   if (!roomCode) {
-      return <LandingPage socket={socket} />;
+      if (showAbout) {
+          return <AboutPage onBack={() => {
+              setShowAbout(false);
+              window.history.pushState({}, '', '/');
+          }} />;
+      }
+      return <LandingPage socket={socket} onShowAbout={() => {
+          setShowAbout(true);
+          window.history.pushState({}, '', '/about');
+      }} />;
   }
 
   if (!gameState) {
