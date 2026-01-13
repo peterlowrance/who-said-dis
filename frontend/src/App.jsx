@@ -15,6 +15,21 @@ function App() {
   const [roomCode, setRoomCode] = useState(null);
   const [showAbout, setShowAbout] = useState(window.location.pathname === '/about');
 
+  // Effect to handle SEO/Title updates
+  useEffect(() => {
+    if (showAbout) {
+      document.title = "About - Who Said Dis?";
+      document.querySelector('meta[name="description"]')?.setAttribute('content', 
+        "Learn how to play Who Said Dis? - The hilarious party game of anonymous answers and guessing."
+      );
+    } else {
+      document.title = roomCode ? `Game ${roomCode} - Who Said Dis?` : "Who Said Dis? - The Hilarious Party Game";
+      document.querySelector('meta[name="description"]')?.setAttribute('content', 
+        "Play 'Who Said Dis?' online! Write funny anonymous answers to prompts and guess who wrote what."
+      );
+    }
+  }, [showAbout, roomCode]);
+
   useEffect(() => {
     const onConnect = () => {
       setConnected(true);
